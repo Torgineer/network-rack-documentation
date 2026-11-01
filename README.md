@@ -1,6 +1,7 @@
 # Netzwerkschrank-Portplan
 
-Python-Skript zum Erstellen eines übersichtlichen Portplans für den Netzwerkschrank als PDF. Die Anschlussbelegung und die VLAN-Referenzliste werden direkt in der Python-Datei gepflegt.
+Python-Skript zum Erstellen eines übersichtlichen Portplans für den Netzwerkschrank als PDF. 
+Die Eingabedaten liegen in `data/rack_data.py`. Die PDF-Erstellung befindet sich in `network_rack_documentation.py`.
 
 Die PDF enthält standardmäßig separate Seiten für Patchpanel, Switch und UCG-Ultra. Jede Komponente erhält eine eigene Überschrift und eine eigene Porttabelle.
 
@@ -254,6 +255,9 @@ Standardmäßig liegt der Ausgabeordner neben dem Skript. Für einen anderen Ord
 
 ```text
 network-rack-documentation/
+├── data/
+│   ├── .gitignore
+│   └── rack_data.py
 ├── .gitignore
 ├── network_rack_documentation.py
 ├── README.md
