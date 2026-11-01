@@ -1,11 +1,11 @@
 # %%
 # -*- coding: utf-8 -*-
-"""Netzwerkschrank-Portplan als PDF.
+"""Network rack documentation as PDF.
 
-Enthält Patchpanel, Switch und UCG-Ultra auf separaten Seiten.
+Creates port plans and other rack documentation pages.
 
 Installation: python -m pip install reportlab
-Start: python patchpanel_portplan.py
+Start: python network_rack_documentation.py
 """
 
 

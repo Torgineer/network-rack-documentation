@@ -44,13 +44,13 @@ py -m pip install reportlab
 3. Speichere die Datei und starte das Skript:
 
 ```bash
-python patchpanel_portplan.py
+python network_rack_documentation.py
 ```
 
 Unter Windows alternativ:
 
 ```powershell
-py patchpanel_portplan.py
+py network_rack_documentation.py
 ```
 
 Die PDF wird im Unterordner `output` neben der Python-Datei gespeichert. Der Ordner wird bei Bedarf automatisch angelegt. Nach erfolgreicher Erstellung gibt das Skript den vollständigen Pfad zur PDF im Terminal aus.
@@ -253,10 +253,10 @@ Standardmäßig liegt der Ausgabeordner neben dem Skript. Für einen anderen Ord
 ## Projektstruktur
 
 ```text
-patchpanel-portplan/
+network-rack-documentation/
 ├── .gitignore
-├── patchpanel_portplan.py
+├── network_rack_documentation.py
 ├── README.md
-└── output/                     # Wird beim Ausführen angelegt
+└── output/
     └── .gitignore
 ```
