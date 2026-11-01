@@ -22,12 +22,7 @@ from reportlab.platypus import (
     PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
-from data.rack_data import (
-    PORTS_PATCHFELD,
-    PORTS_SWITCH,
-    PORTS_UCG_ULTRA,
-    VLAN_REFERENZ,
-)
+from data.rack_data import RACK_COMPONENTS, VLAN_REFERENZ
 
 
 # =============================================================
@@ -180,17 +175,17 @@ def erstelle_pdf(hochformat=True):
 
 
     elemente = []
-    elemente.extend(
-        portplan_elemente("Patchpanel-Portplan", PORTS_PATCHFELD)
-    )
-    elemente.append(PageBreak())
-    elemente.extend(
-        portplan_elemente("Switch-Portplan Lite-8-PoE", PORTS_SWITCH)
-    )
-    elemente.append(PageBreak())
-    elemente.extend(
-        portplan_elemente("UCG-Ultra-Portplan", PORTS_UCG_ULTRA)
-    )
+
+    for index, komponente in enumerate(RACK_COMPONENTS):
+        if index > 0:
+            elemente.append(PageBreak())
+
+        elemente.extend(
+            portplan_elemente(
+                komponente["titel"],
+                komponente["ports"],
+            )
+        )
 
 
     def fusszeile(canvas, dokument):
@@ -213,3 +208,5 @@ def erstelle_pdf(hochformat=True):
 
 if __name__ == "__main__":
     erstelle_pdf(hochformat=HOCHFORMAT)
+
+# %%

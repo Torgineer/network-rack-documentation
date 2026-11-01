@@ -1,13 +1,13 @@
 # Netzwerkschrank-Portplan
 
-Python-Skript zum Erstellen eines übersichtlichen Portplans für den Netzwerkschrank als PDF. 
-Die Eingabedaten liegen in `data/rack_data.py`. Die PDF-Erstellung befindet sich in `network_rack_documentation.py`.
+Python-Skript zum Erstellen eines übersichtlichen Portplans für den Netzwerkschrank als PDF. Die Eingabedaten liegen in `data/rack_data.py`. Die PDF-Erstellung befindet sich in `network_rack_documentation.py`.
 
-Die PDF enthält standardmäßig separate Seiten für Patchpanel, Switch und UCG-Ultra. Jede Komponente erhält eine eigene Überschrift und eine eigene Porttabelle.
+Die PDF enthält standardmäßig separate Seiten für Patchpanel, Switch und UCG-Ultra. Jede Komponente erhält eine eigene Überschrift und eine eigene Porttabelle. Neue Komponenten werden ausschließlich in der Datendatei ergänzt.
 
 ## Funktionen
 
 - Separate Portpläne für Patchpanel, Switch und UCG-Ultra in einer PDF.
+- Automatische Erzeugung einer PDF-Seite pro Komponente aus `RACK_COMPONENTS`.
 - VLAN-Referenzliste über jeder Porttabelle.
 - Tabelle mit den Spalten **Port**, **Ziel**, **VLAN**, **PoE** und **Bemerkung**.
 - A4-Hochformat als Standard, optional A4-Querformat.
@@ -40,9 +40,10 @@ py -m pip install reportlab
 
 ## Verwendung
 
-1. Öffne `patchpanel_portplan.py`.
-2. Passe die Einstellungen, die VLAN-Referenzliste und die Portlisten an.
-3. Speichere die Datei und starte das Skript:
+1. Öffne `data/rack_data.py`.
+2. Passe die VLAN-Referenzliste und `RACK_COMPONENTS` an.
+3. Passe bei Bedarf die Einstellungen in `network_rack_documentation.py` an.
+4. Speichere die Dateien und starte das Skript aus dem Projektstammverzeichnis:
 
 ```bash
 python network_rack_documentation.py
@@ -58,7 +59,7 @@ Die PDF wird im Unterordner `output` neben der Python-Datei gespeichert. Der Ord
 
 ## VLAN-Referenzliste konfigurieren
 
-Die Liste `VLAN_REFERENZ` definiert die VLANs, die über jeder Porttabelle in der PDF angezeigt werden. Jeder Eintrag besteht aus der VLAN-ID und einem frei wählbaren Namen:
+Die Liste `VLAN_REFERENZ` in `data/rack_data.py` definiert die VLANs, die über jeder Porttabelle in der PDF angezeigt werden. Jeder Eintrag besteht aus der VLAN-ID und einem frei wählbaren Namen:
 
 ```python
 # VLAN-Referenzliste: (VLAN-ID, Name)
@@ -83,42 +84,52 @@ VLAN 40 – Camera
 
 Die Reihenfolge in `VLAN_REFERENZ` bestimmt die Reihenfolge in der PDF. Wenn die Liste leer ist, wird keine VLAN-Referenzliste ausgegeben.
 
-## Portbelegung konfigurieren
+## Komponenten konfigurieren
 
-Für jede Komponente gibt es eine eigene Portliste:
-
-- `PORTS_PATCHFELD`: Patchpanel
-- `PORTS_SWITCH`: Switch
-- `PORTS_UCG_ULTRA`: UCG-Ultra
-
-Jeder Eintrag enthält fünf Werte:
+Die Liste `RACK_COMPONENTS` in `data/rack_data.py` definiert alle Komponenten, für die eine eigene PDF-Seite erzeugt wird. Jede Komponente benötigt einen Titel und eine Portliste:
 
 ```python
-# (Port, Ziel, VLAN, PoE, Bemerkung)
-PORTS_PATCHFELD = [
-    (1, "Flur 1", "1", "Ja", "Access Point - U7-Pro-XG"),
-    (2, "Büro", "1", "Ja", "Access Point - U7 In-Wall"),
-    (3, "Wohnzimmer", "1", "Ja", "Access Point - U6+"),
-    (4, "Schlafzimmer", "", "", ""),
+RACK_COMPONENTS = [
+    {
+        "titel": "Patchpanel-Portplan",
+        "ports": [
+            (1, "Flur 1", "", "", "WAN"),
+            (2, "Büro", "1", "Ja", "Access Point - U7 In-Wall"),
+            (3, "Wohnzimmer", "1", "Ja", "Access Point - U6+"),
+            (4, "Flur 2", "1", "Ja", "Access Point - U7-Pro-XG"),
+            (5, "Schlafzimmer", "", "", ""),
+        ],
+    },
+    {
+        "titel": "Switch-Portplan Lite-8-PoE",
+        "ports": [
+            (1, "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall", "1", "Ja", ""),
+            (2, "Patchpanel Port 3\nWohnzimmer: Access Point - U6+", "1", "Ja", ""),
+            (3, "Patchpanel Port 4\nFlur: Access Point - U7-Pro-XG", "1", "Ja", ""),
+            (5, "Proxmox Host M720q", "1", "Nein", ""),
+            (8, "UCG-Ultra LAN out", "", "Nein", ""),
+        ],
+    },
+    {
+        "titel": "UCG-Ultra-Portplan",
+        "ports": [
+            (1, "Switch Lite-8-PoE", "1", "Nein", ""),
+            (5, "WAN", "", "Nein", "Uplink"),
+        ],
+    },
 ]
 ```
 
-```python
-# (Port, Ziel, VLAN, PoE, Bemerkung)
-PORTS_SWITCH = [
-    (1, "Patchpanel Port 1\nFlur: Access Point - U7-Pro-XG", "1", "Ja", ""),
-    (2, "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall", "1", "Ja", ""),
-    (5, "Proxmox Host M720q", "1", "Nein", ""),
-    (8, "UCG-Ultra LAN out", "", "Nein", ""),
-]
-```
+| Feld | Bedeutung |
+| --- | --- |
+| `titel` | Überschrift der PDF-Seite |
+| `ports` | Liste der Port-Einträge dieser Komponente |
+
+Jeder Port-Eintrag enthält fünf Werte:
 
 ```python
 # (Port, Ziel, VLAN, PoE, Bemerkung)
-PORTS_UCG_ULTRA = [
-    (1, "Switch Lite-8-PoE", "1", "Nein", ""),
-    (5, "WAN", "", "Nein", "Uplink"),
-]
+(1, "Flur 1", "", "", "WAN"),
 ```
 
 | Feld | Bedeutung | Beispiel |
@@ -131,9 +142,25 @@ PORTS_UCG_ULTRA = [
 
 Die VLAN-Angabe kann als Text, etwa `"10"`, oder als Zahl, etwa `10`, eingetragen werden. Für nicht zugewiesene VLANs kann das Feld leer bleiben.
 
-Die Reihenfolge der Einträge bestimmt die Reihenfolge in der PDF. Weitere Ports lassen sich durch zusätzliche Einträge ergänzen. Jeder Eintrag muss genau fünf Werte enthalten.
+Die Reihenfolge der Einträge in `RACK_COMPONENTS` bestimmt die Reihenfolge der PDF-Seiten. Die Reihenfolge der Port-Einträge bestimmt die Reihenfolge in der jeweiligen Tabelle. Jeder Port-Eintrag muss genau fünf Werte enthalten.
 
 Die mitgelieferten Belegungen sind Beispiele. Das Skript übernimmt die Angaben unverändert; es erkennt oder prüft keine Netzwerkverbindungen, VLAN-Zuordnungen oder PoE-Versorgung.
+
+## Neue Komponente hinzufügen
+
+Um beispielsweise ein zweites Patchpanel hinzuzufügen, ergänze in `data/rack_data.py` einen weiteren Eintrag in `RACK_COMPONENTS`:
+
+```python
+{
+    "titel": "Patchpanel 2 – Portplan",
+    "ports": [
+        (1, "Keller", "", "", ""),
+        (2, "Terrasse", "", "", ""),
+    ],
+},
+```
+
+Das Hauptskript muss dafür nicht angepasst werden. Die neue Komponente erhält automatisch eine eigene Seite in derselben PDF.
 
 ## Zeilenumbrüche in Zellen
 
@@ -152,33 +179,9 @@ Flur: Access Point - U7-Pro-XG
 
 Das funktioniert in allen Textfeldern eines Port-Eintrags, also in **Ziel** und **Bemerkung**.
 
-## Neue Komponente hinzufügen
-
-Um eine weitere Komponente aufzunehmen:
-
-1. Lege eine neue Portliste an, etwa:
-
-   ```python
-   PORTS_ROUTER = [
-       (1, "WAN", "", "Nein", ""),
-       (2, "Switch", "1", "Nein", ""),
-   ]
-   ```
-
-2. Erweitere die PDF-Erstellung in `erstelle_pdf()`:
-
-   ```python
-   elemente.append(PageBreak())
-   elemente.extend(
-       portplan_elemente("Router-Portplan", PORTS_ROUTER)
-   )
-   ```
-
-Jede neue Komponente erhält dadurch eine eigene Seite in derselben PDF.
-
 ## Einstellungen
 
-Die Konfiguration befindet sich oben in der Python-Datei.
+Die Einstellungen für Titel, Seitenformat, Dateiname und Ausgabeordner befinden sich oben in `network_rack_documentation.py`.
 
 ### Titel
 
@@ -249,7 +252,7 @@ Eine vorhandene Datei gleichen Namens wird überschrieben. Auch mit aktiviertem 
 AUSGABEORDNER = Path(__file__).resolve().parent / "output"
 ```
 
-Standardmäßig liegt der Ausgabeordner neben dem Skript. Für einen anderen Ordner passe diese Variable an.
+Standardmäßig liegt der Ausgabeordner neben dem Hauptskript. Für einen anderen Ordner passe diese Variable an.
 
 ## Projektstruktur
 
