@@ -1,94 +1,96 @@
-# Netzwerkschrank-Dokumentation
+# Network Rack Documentation
 
-Python-Skript zum Erstellen einer Netzwerkschrank-Dokumentation als PDF. Die Eingabedaten liegen in `data/rack_data.py`. Die PDF-Erstellung befindet sich in `network_rack_documentation.py`.
+Python script for creating network rack documentation as a PDF. The input data is stored in `data/rack_data.py`. The PDF generation is located in `network_rack_documentation.py`.
 
-Die PDF enthält standardmäßig die Aufteilung des Netzwerkschranks sowie separate Seiten für Patchpanel, Switch und UCG-Ultra. Jede Komponente erhält eine eigene Überschrift und eine eigene Porttabelle. Neue Komponenten werden ausschließlich in der Datendatei ergänzt.
+The PDF contains the network rack layout as well as separate pages for the patch panel, switch, and UCG-Ultra. Each component receives its own heading and port table. New components are added exclusively in the data file.
 
-## Funktionen
+The PDF file name and console output are in English. The visible content of the generated PDF remains in German.
 
-- Rack-Aufteilung als erste Seite der PDF.
-- Automatische Berechnung der Rack-Größe anhand von `RACK_INFO["gesamt_he"]`.
-- Automatische Darstellung nicht belegter Höheneinheiten als Reserve.
-- Separate Portpläne für Patchpanel, Switch und UCG-Ultra in einer PDF.
-- Automatische Erzeugung einer PDF-Seite pro Komponente aus `RACK_COMPONENTS`.
-- VLAN-Referenzliste über jeder Porttabelle.
-- Tabelle mit den Spalten **Port**, **Ziel**, **VLAN**, **PoE** und **Bemerkung**.
-- A4-Hochformat als Standard, optional A4-Querformat.
-- Aktuelles lokales Datum und Uhrzeit in der PDF.
-- Optionaler Zeitstempel im Dateinamen.
-- An das Seitenformat angepasste Spaltenbreiten.
-- Automatischer Zeilenumbruch für längere Einträge.
-- Wiederholung des Tabellenkopfs auf Folgeseiten.
-- Seitenzahlen in der Fußzeile.
-- Abwechselnde Zeilenfarben zur besseren Lesbarkeit.
+## Features
 
-## Voraussetzungen
+- Network rack layout as the first page of the PDF.
+- Rack size is configured using `RACK_INFO["total_rack_units"]`.
+- Unoccupied rack units are automatically displayed as reserve space.
+- Separate port plans for the patch panel, switch, and UCG-Ultra in one PDF.
+- Automatic creation of one PDF page per component from `RACK_COMPONENTS`.
+- VLAN reference list above each port table.
+- Table with the columns **Port**, **Ziel**, **VLAN**, **PoE**, and **Bemerkung**.
+- A4 portrait format by default, with optional A4 landscape format.
+- Current local date and time in the PDF.
+- Optional timestamp in the file name.
+- Column widths adapted to the page format.
+- Automatic line breaks for longer entries.
+- Repeated table header on subsequent pages.
+- Page numbers in the footer.
+- Alternating row colors for better readability.
+
+## Requirements
 
 - Python 3
-- Python-Paket `reportlab`
+- Python package `reportlab`
 
 ## Installation
 
-Öffne ein Terminal im Projektordner und installiere die Abhängigkeit:
+Open a terminal in the project folder and install the dependency:
 
 ```bash
 python -m pip install reportlab
 ```
 
-Unter Windows kannst du alternativ den Python-Launcher verwenden:
+On Windows, you can alternatively use the Python launcher:
 
 ```powershell
 py -m pip install reportlab
 ```
 
-## Verwendung
+## Usage
 
-1. Öffne `data/rack_data.py`.
-2. Passe `RACK_INFO`, `RACK_LAYOUT`, die VLAN-Referenzliste und `RACK_COMPONENTS` an.
-3. Passe bei Bedarf die Einstellungen in `network_rack_documentation.py` an.
-4. Speichere die Dateien und starte das Skript aus dem Projektstammverzeichnis:
+1. Open `data/rack_data.py`.
+2. Adjust `RACK_INFO`, `RACK_LAYOUT`, the VLAN reference list, and `RACK_COMPONENTS`.
+3. Adjust the settings in `network_rack_documentation.py` if necessary.
+4. Save the files and run the script from the project root directory:
 
 ```bash
 python network_rack_documentation.py
 ```
 
-Unter Windows alternativ:
+On Windows, alternatively:
 
 ```powershell
 py network_rack_documentation.py
 ```
 
-Die PDF wird im Unterordner `output` neben der Python-Datei gespeichert. Der Ordner wird bei Bedarf automatisch angelegt. Nach erfolgreicher Erstellung gibt das Skript den vollständigen Pfad zur PDF im Terminal aus.
+The PDF is saved in the `output` folder next to the Python file. The folder is created automatically if necessary. After successful creation, the script prints the full path to the PDF in the terminal.
 
-## Netzwerkschrank konfigurieren
+## Configuring the network rack
 
-Die allgemeinen Angaben zum Netzwerkschrank befinden sich in `RACK_INFO` in `data/rack_data.py`:
+The general information about the network rack is stored in `RACK_INFO` in `data/rack_data.py`:
 
 ```python
 RACK_INFO = {
-    "titel": "Netzwerkschrank-Aufteilung",
-    "gesamt_he": 16,
-    "untertitel": (
+    "title": "Netzwerkschrank-Aufteilung",
+    "total_rack_units": 16,
+    "subtitle": (
         '19" Wandschrank, 16 HE, 450 mm Tiefe, Glastür – '
         "Digitus Digital Basic"
     ),
 }
 ```
 
-| Feld | Bedeutung |
+| Field | Meaning |
 | --- | --- |
-| `titel` | Überschrift der Rack-Aufteilungsseite |
-| `gesamt_he` | Gesamtanzahl der Höheneinheiten des Schranks |
-| `untertitel` | Beschreibung des Schranks |
+| `title` | Heading of the rack layout page |
+| `total_rack_units` | Total number of rack units in the cabinet |
+| `subtitle` | Description of the cabinet |
 
-Die Rack-Größe wird über `gesamt_he` festgelegt. Sie wird nicht aus der höchsten belegten Höheneinheit berechnet. Dadurch können freie Höheneinheiten korrekt als Reserve dargestellt werden.
+The rack size is defined by `total_rack_units`. It is not calculated from the highest occupied rack unit. This allows unoccupied rack units to be displayed correctly as reserve space.
 
-## Rack-Aufteilung konfigurieren
+## Configuring the rack layout
 
-Die Liste `RACK_LAYOUT` in `data/rack_data.py` definiert die im Schrank verbauten Komponenten:
+The `RACK_LAYOUT` list in `data/rack_data.py` defines the components installed in the cabinet:
 
 ```python
-# Format: (oberste HE, Anzahl HE, Name, Untertitel, Farbe)
+# Format: (top rack unit, number of rack units, name, subtitle, color)
 RACK_LAYOUT = [
     (15, 1, "FRITZ!Box 5690",
      "auf Fachboden, WAN von hinten", "#FFE0B2"),
@@ -107,31 +109,31 @@ RACK_LAYOUT = [
 ]
 ```
 
-| Feld | Bedeutung | Beispiel |
+| Field | Meaning | Example |
 | --- | --- | --- |
-| Oberste HE | Höchste belegte Höheneinheit der Komponente | `15` |
-| Anzahl HE | Anzahl der belegten Höheneinheiten | `2` |
-| Name | Bezeichnung der Komponente | `"UniFi UNVR Instant"` |
-| Untertitel | Zusätzliche Montage- oder Anschlussinformation | `"2U-Rackmount"` |
-| Farbe | Hintergrundfarbe in der Rack-Darstellung | `"#F8BBD0"` |
+| Top rack unit | Highest occupied rack unit of the component | `15` |
+| Number of rack units | Number of occupied rack units | `2` |
+| Name | Name of the component | `"UniFi UNVR Instant"` |
+| Subtitle | Additional mounting or connection information | `"2U-Rackmount"` |
+| Color | Background color in the rack layout | `"#F8BBD0"` |
 
-Eine Komponente mit `top = 9` und `span = 2` belegt beispielsweise die Höheneinheiten 8 und 9. Die Reihenfolge der Einträge in `RACK_LAYOUT` hat keinen Einfluss auf die Darstellung; die Komponenten werden nach ihrer Position im Rack sortiert.
+A component with `top = 9` and `span = 2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are sorted by their position in the rack.
 
-Nicht belegte Höheneinheiten werden automatisch als Reserve ergänzt und mit `RESERVE_COLOR` dargestellt:
+Unoccupied rack units are automatically added as reserve space and displayed using `RESERVE_COLOR`:
 
 ```python
 RESERVE_COLOR = "#F5F5F5"
 ```
 
-Das Skript prüft, ob Höheneinheiten außerhalb des Schranks liegen oder doppelt belegt sind. Bei einem ungültigen Layout wird die PDF-Erstellung mit einer Fehlermeldung abgebrochen.
+The script checks whether rack units are outside the cabinet or occupied more than once. If the layout is invalid, PDF creation is aborted with an error message.
 
-## VLAN-Referenzliste konfigurieren
+## Configuring the VLAN reference list
 
-Die Liste `VLAN_REFERENZ` in `data/rack_data.py` definiert die VLANs, die über jeder Porttabelle in der PDF angezeigt werden. Jeder Eintrag besteht aus der VLAN-ID und einem frei wählbaren Namen:
+The `VLAN_REFERENCES` list in `data/rack_data.py` defines the VLANs displayed above each port table in the PDF. Each entry consists of a VLAN ID and a freely selectable name:
 
 ```python
-# VLAN-Referenzliste: (VLAN-ID, Name)
-VLAN_REFERENZ = [
+# VLAN reference list: (VLAN ID, name)
+VLAN_REFERENCES = [
     (1, "Default"),
     (10, "Home"),
     (20, "IoT"),
@@ -140,7 +142,7 @@ VLAN_REFERENZ = [
 ]
 ```
 
-In der PDF erscheint die Liste beispielsweise so:
+The list appears in the PDF as follows:
 
 ```text
 VLAN 1 – Default
@@ -150,16 +152,16 @@ VLAN 30 – Guest
 VLAN 40 – Camera
 ```
 
-Die Reihenfolge in `VLAN_REFERENZ` bestimmt die Reihenfolge in der PDF. Wenn die Liste leer ist, wird keine VLAN-Referenzliste ausgegeben.
+The order in `VLAN_REFERENCES` determines the order in the PDF. If the list is empty, no VLAN reference list is displayed.
 
-## Komponenten konfigurieren
+## Configuring components
 
-Die Liste `RACK_COMPONENTS` in `data/rack_data.py` definiert alle Komponenten, für die eine eigene PDF-Seite erzeugt wird. Jede Komponente benötigt einen Titel und eine Portliste:
+The `RACK_COMPONENTS` list in `data/rack_data.py` defines all components for which a separate PDF page is created. Each component requires a title and a port list:
 
 ```python
 RACK_COMPONENTS = [
     {
-        "titel": "Patchpanel-Portplan",
+        "title": "Patchpanel-Portplan",
         "ports": [
             (1, "Flur 1", "", "", "WAN"),
             (2, "Büro", "1", "Ja", "Access Point - U7 In-Wall"),
@@ -169,7 +171,7 @@ RACK_COMPONENTS = [
         ],
     },
     {
-        "titel": "Switch-Portplan Lite-8-PoE",
+        "title": "Switch-Portplan Lite-8-PoE",
         "ports": [
             (1, "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall", "1", "Ja", ""),
             (2, "Patchpanel Port 3\nWohnzimmer: Access Point - U6+", "1", "Ja", ""),
@@ -179,7 +181,7 @@ RACK_COMPONENTS = [
         ],
     },
     {
-        "titel": "UCG-Ultra-Portplan",
+        "title": "UCG-Ultra-Portplan",
         "ports": [
             (1, "Switch Lite-8-PoE", "1", "Nein", ""),
             (5, "WAN", "", "Nein", "Uplink"),
@@ -188,39 +190,39 @@ RACK_COMPONENTS = [
 ]
 ```
 
-| Feld | Bedeutung |
+| Field | Meaning |
 | --- | --- |
-| `titel` | Überschrift der PDF-Seite |
-| `ports` | Liste der Port-Einträge dieser Komponente |
+| `title` | Heading of the PDF page |
+| `ports` | List of port entries for this component |
 
-Jeder Port-Eintrag enthält fünf Werte:
+Each port entry contains five values:
 
 ```python
-# (Port, Ziel, VLAN, PoE, Bemerkung)
+# (port, destination, VLAN, PoE, remark)
 (1, "Flur 1", "", "", "WAN"),
 ```
 
-| Feld | Bedeutung | Beispiel |
+| Field | Meaning | Example |
 | --- | --- | --- |
-| Port | Portnummer der jeweiligen Komponente | `1` |
-| Ziel | Raum, Anschluss oder angeschlossenes Gerät | `"Wohnzimmer"` |
-| VLAN | VLAN-ID des Anschlusses | `"1"`, `"10"` oder `""` |
-| PoE | Manuell eingetragene PoE-Angabe | `"Ja"`, `"Nein"` oder `""` |
-| Bemerkung | Freitext für zusätzliche Informationen | `"Uplink"` |
+| Port | Port number of the respective component | `1` |
+| Destination | Room, connection, or connected device | `"Wohnzimmer"` |
+| VLAN | VLAN ID of the connection | `"1"`, `"10"`, or `""` |
+| PoE | Manually entered PoE information | `"Ja"`, `"Nein"`, or `""` |
+| Remark | Free text for additional information | `"Uplink"` |
 
-Die VLAN-Angabe kann als Text, etwa `"10"`, oder als Zahl, etwa `10`, eingetragen werden. Für nicht zugewiesene VLANs kann das Feld leer bleiben.
+The VLAN value can be entered as text, for example `"10"`, or as a number, for example `10`. The field can remain empty for unassigned VLANs.
 
-Die Reihenfolge der Einträge in `RACK_COMPONENTS` bestimmt die Reihenfolge der PDF-Seiten. Die Reihenfolge der Port-Einträge bestimmt die Reihenfolge in der jeweiligen Tabelle. Jeder Port-Eintrag muss genau fünf Werte enthalten.
+The order of entries in `RACK_COMPONENTS` determines the order of the PDF pages. The order of port entries determines the order in the respective table. Each port entry must contain exactly five values.
 
-Die mitgelieferten Belegungen sind Beispiele. Das Skript übernimmt die Angaben unverändert; es erkennt oder prüft keine Netzwerkverbindungen, VLAN-Zuordnungen oder PoE-Versorgung.
+The supplied assignments are examples. The script uses the information unchanged; it does not detect or validate network connections, VLAN assignments, or PoE supply.
 
-## Neue Komponente hinzufügen
+## Adding a new component
 
-Um beispielsweise ein zweites Patchpanel hinzuzufügen, ergänze in `data/rack_data.py` einen weiteren Eintrag in `RACK_COMPONENTS`:
+To add a second patch panel, for example, add another entry to `RACK_COMPONENTS` in `data/rack_data.py`:
 
 ```python
 {
-    "titel": "Patchpanel 2 – Portplan",
+    "title": "Patchpanel 2 – Portplan",
     "ports": [
         (1, "Keller", "", "", ""),
         (2, "Terrasse", "", "", ""),
@@ -228,101 +230,103 @@ Um beispielsweise ein zweites Patchpanel hinzuzufügen, ergänze in `data/rack_d
 },
 ```
 
-Das Hauptskript muss dafür nicht angepasst werden. Die neue Komponente erhält automatisch eine eigene Seite in derselben PDF.
+The main script does not need to be adjusted. The new component automatically receives its own page in the same PDF.
 
-## Zeilenumbrüche in Zellen
+## Line breaks in cells
 
-Für einen manuellen Zeilenumbruch innerhalb einer Zelle verwende `\n`:
+Use `\n` for a manual line break within a cell:
 
 ```python
 (1, "Patchpanel Port 1\nFlur: Access Point - U7-Pro-XG", "1", "Ja", ""),
 ```
 
-In der PDF wird daraus:
+This becomes the following in the PDF:
 
 ```text
 Patchpanel Port 1
 Flur: Access Point - U7-Pro-XG
 ```
 
-Das funktioniert in allen Textfeldern eines Port-Eintrags, also in **Ziel** und **Bemerkung**.
+This works in all text fields of a port entry, i.e. in **destination** and **remark**.
 
-## Einstellungen
+## Settings
 
-Die Einstellungen für Titel, Seitenformat, Dateiname und Ausgabeordner befinden sich oben in `network_rack_documentation.py`.
+The settings for the document title, page orientation, file name, and output folder are located at the top of `network_rack_documentation.py`.
 
-### Titel
-
-```python
-TITEL = "Netzwerkschrank – Dokumentation"
-```
-
-### Seitenformat
+### Document title
 
 ```python
-HOCHFORMAT = True
+DOCUMENT_TITLE = "Netzwerkschrank – Dokumentation"
 ```
 
-- `True`: A4-Hochformat.
-- `False`: A4-Querformat.
+### Page orientation
 
-Beim regulären Skriptstart wird dieser Wert an die Funktion übergeben:
+```python
+PORTRAIT_ORIENTATION = True
+```
+
+- `True`: A4 portrait format.
+- `False`: A4 landscape format.
+
+During a regular script start, this value is passed to the function:
 
 ```python
 if __name__ == "__main__":
-    erstelle_pdf(hochformat=HOCHFORMAT)
+    create_pdf(portrait_orientation=PORTRAIT_ORIENTATION)
 ```
 
-Bei einem direkten Funktionsaufruf ist Hochformat der Standard:
+For a direct function call, portrait format is the default:
 
 ```python
-erstelle_pdf()                  # A4-Hochformat
-erstelle_pdf(hochformat=False)  # A4-Querformat
+create_pdf()                                  # A4 portrait format
+create_pdf(portrait_orientation=False)        # A4 landscape format
 ```
 
-### Datum und Uhrzeit
+### Date and time
 
-Der Zeitstempel wird bei jedem Funktionsaufruf neu erzeugt. Die sichtbare Datumszeile verwendet folgendes Format:
+The timestamp is created anew on every function call. The visible date line uses the following format:
 
 ```text
 Stand: 26.10.2026 – 17:25 Uhr
 ```
 
-Das Format wird innerhalb von `erstelle_pdf()` festgelegt:
+The format is defined within `create_pdf()`:
 
 ```python
-unterzeile = erstellt_am.strftime("Stand: %d.%m.%Y – %H:%M Uhr")
+created_at_text = created_at.strftime(
+    "Stand: %d.%m.%Y – %H:%M Uhr"
+)
 ```
 
-### Dateiname
+### File name
 
 ```python
-ZEITSTEMPEL_IM_DATEINAMEN = True
+TIMESTAMP_IN_FILE_NAME = True
 ```
 
-Mit `True` enthält der Dateiname Datum und Uhrzeit einschließlich Sekunden:
+With `True`, the file name contains the date and time including seconds:
 
 ```text
-netzwerkschrank_dokumentation_2026-10-26_17-25-00.pdf
+network_rack_documentation_2026-10-26_17-25-00.pdf
 ```
 
-Mit `False` wird immer derselbe Dateiname verwendet:
+With `False`, the same file name is always used:
 
 ```text
-netzwerkschrank_dokumentation.pdf
+network_rack_documentation.pdf
 ```
 
-Eine vorhandene Datei gleichen Namens wird überschrieben. Auch mit aktiviertem Zeitstempel können zwei Aufrufe innerhalb derselben Sekunde denselben Dateinamen erzeugen.
+An existing file with the same name is overwritten. Even with an enabled timestamp, two calls within the same second can produce the same file name.
 
-### Ausgabeordner
+### Output folder
 
 ```python
-AUSGABEORDNER = Path(__file__).resolve().parent / "output"
+OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 ```
 
-Standardmäßig liegt der Ausgabeordner neben dem Hauptskript. Für einen anderen Ordner passe diese Variable an.
+By default, the output folder is located next to the main script. To use a different folder, adjust this variable.
 
-## Projektstruktur
+## Project structure
 
 ```text
 network-rack-documentation/

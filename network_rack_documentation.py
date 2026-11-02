@@ -1,8 +1,8 @@
 # %%
 # -*- coding: utf-8 -*-
-"""Netzwerkschrank-Dokumentation als PDF.
+"""Network rack documentation as PDF.
 
-Erzeugt eine PDF mit Rack-Aufteilung und Portplänen.
+Creates a PDF containing the rack layout and port plans.
 
 Installation: python -m pip install reportlab
 Start: python network_rack_documentation.py
@@ -26,102 +26,110 @@ from data.rack_data import (
     RACK_INFO,
     RACK_LAYOUT,
     RESERVE_COLOR,
-    VLAN_REFERENZ,
+    VLAN_REFERENCES,
 )
 
 # =============================================================
-# EINSTELLUNGEN – hier manuell anpassen
+# SETTINGS – adjust manually here
 # =============================================================
-TITEL = "Netzwerkschrank – Dokumentation"
+DOCUMENT_TITLE = "Netzwerkschrank – Dokumentation"
 
-# True: A4-Hochformat / False: A4-Querformat
-HOCHFORMAT = True
+# True: A4 portrait / False: A4 landscape
+PORTRAIT_ORIENTATION = True
 
-# True: jede PDF mit Zeitstempel im Dateinamen speichern.
-# False: netzwerkschrank_dokumentation.pdf bei jedem Lauf überschreiben.
-ZEITSTEMPEL_IM_DATEINAMEN = True
+# True: save every PDF with a timestamp in its file name.
+# False: overwrite netzwerkschrank_dokumentation.pdf on every run.
+TIMESTAMP_IN_FILE_NAME = True
 
-# Ausgabeordner neben dieser Python-Datei.
-AUSGABEORDNER = Path(__file__).resolve().parent / "output"
+# Output folder next to this Python file.
+OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 
 
-def pruefe_layout(layout, gesamt_he):
-    """Prüft HE-Bereiche und doppelte Belegungen."""
-    if gesamt_he < 1:
-        raise ValueError("RACK_INFO['gesamt_he'] muss mindestens 1 sein.")
+def validate_layout(layout, total_rack_units):
+    """Validate rack unit ranges and duplicate occupancy."""
+    if total_rack_units < 1:
+        raise ValueError(
+            "RACK_INFO['total_rack_units'] must be at least 1."
+        )
 
-    freie_he = set(range(1, gesamt_he + 1))
+    available_rack_units = set(range(1, total_rack_units + 1))
 
     for top, span, label, *_ in layout:
         if type(top) is not int or type(span) is not int:
             raise ValueError(
-                f"{label}: HE und Anzahl HE müssen ganze Zahlen sein."
+                f"{label}: rack unit and number of rack units "
+                "must be integers."
             )
 
-        if span < 1 or top > gesamt_he or top - span < 0:
-            raise ValueError(f"{label}: ungültiger HE-Bereich.")
+        if span < 1 or top > total_rack_units or top - span < 0:
+            raise ValueError(f"{label}: invalid rack unit range.")
 
-        belegte_he = set(range(top - span + 1, top + 1))
+        occupied_rack_units = set(range(top - span + 1, top + 1))
 
-        if not belegte_he <= freie_he:
-            raise ValueError(f"{label}: HE doppelt belegt.")
+        if not occupied_rack_units <= available_rack_units:
+            raise ValueError(f"{label}: rack unit is occupied twice.")
 
-        freie_he -= belegte_he
+        available_rack_units -= occupied_rack_units
 
     return layout
 
 
-def ergaenze_reserven(layout, gesamt_he):
-    """Ergänzt alle freien HE als Reserve."""
-    belegte_he = set()
+def add_reserve_units(layout, total_rack_units):
+    """Add all unoccupied rack units as reserve space."""
+    occupied_rack_units = set()
 
     for top, span, *_ in layout:
-        belegte_he.update(range(top - span + 1, top + 1))
+        occupied_rack_units.update(range(top - span + 1, top + 1))
 
-    freie_he = set(range(1, gesamt_he + 1)) - belegte_he
+    available_rack_units = (
+        set(range(1, total_rack_units + 1))
+        - occupied_rack_units
+    )
 
-    reserven = [
-        (he, 1, "Reserve", "", RESERVE_COLOR)
-        for he in freie_he
+    reserve_units = [
+        (rack_unit, 1, "Reserve", "", RESERVE_COLOR)
+        for rack_unit in available_rack_units
     ]
 
-    return sorted(layout + reserven, reverse=True)
+    return sorted(layout + reserve_units, reverse=True)
 
 
-class RackAufteilung(Flowable):
-    """Zeichnet die Rack-Aufteilung als Flowable für die PDF."""
+class RackLayout(Flowable):
+    """Draw the network rack layout as a flowable for the PDF."""
 
-    def __init__(self, layout, gesamt_he, breite, hoehe):
+    def __init__(self, layout, total_rack_units, width, height):
         super().__init__()
         self.layout = layout
-        self.gesamt_he = gesamt_he
-        self.breite = breite
-        self.hoehe = hoehe
+        self.total_rack_units = total_rack_units
+        self.width = width
+        self.height = height
 
         self.rack_x = 0
-        self.rack_w = breite * 0.52
+        self.rack_width = width * 0.52
         self.rack_bottom = 0
-        self.rack_top = hoehe
-        self.he_hoehe = hoehe / gesamt_he
+        self.rack_top = height
+        self.rack_unit_height = height / total_rack_units
 
         self.inset_x = 1.2 * mm
         self.inset_y = 0.6 * mm
         self.frame_color = colors.HexColor("#555555")
 
     def wrap(self, available_width, available_height):
-        return self.breite, self.hoehe
+        return self.width, self.height
 
-    def he_y(self, he):
-        return self.rack_bottom + (he - 1) * self.he_hoehe
+    def rack_unit_y(self, rack_unit):
+        return self.rack_bottom + (
+            (rack_unit - 1) * self.rack_unit_height
+        )
 
     def draw_text(self, canvas, x, y, text, size=9, bold=False,
                   max_width=None):
         font = "Helvetica-Bold" if bold else "Helvetica"
 
         if max_width is not None:
-            width = canvas.stringWidth(text, font, size)
-            if width > max_width:
-                size *= max_width / width
+            text_width = canvas.stringWidth(text, font, size)
+            if text_width > max_width:
+                size *= max_width / text_width
 
         canvas.setFillColor(colors.black)
         canvas.setFont(font, size)
@@ -133,32 +141,32 @@ class RackAufteilung(Flowable):
         canvas.rect(
             self.rack_x,
             self.rack_bottom,
-            self.rack_w,
+            self.rack_width,
             self.rack_top - self.rack_bottom,
         )
 
-        for boundary in range(self.gesamt_he + 1):
-            y = self.he_y(boundary + 1)
+        for boundary in range(self.total_rack_units + 1):
+            y = self.rack_unit_y(boundary + 1)
 
-            if 0 < boundary < self.gesamt_he:
+            if 0 < boundary < self.total_rack_units:
                 canvas.setLineWidth(0.3)
                 canvas.line(
                     self.rack_x, y,
-                    self.rack_x + self.rack_w, y,
+                    self.rack_x + self.rack_width, y,
                 )
 
             canvas.setLineWidth(0.5)
             for x in (
                 self.rack_x + 3 * mm,
-                self.rack_x + self.rack_w - 3 * mm,
+                self.rack_x + self.rack_width - 3 * mm,
             ):
                 canvas.circle(x, y, 1.1 * mm)
 
     def draw_component(self, canvas, top, span, label, subtitle, color):
-        y = self.he_y(top - span + 1)
-        height = span * self.he_hoehe
+        y = self.rack_unit_y(top - span + 1)
+        height = span * self.rack_unit_height
         box_x = self.rack_x + self.inset_x
-        box_w = self.rack_w - 2 * self.inset_x
+        box_width = self.rack_width - 2 * self.inset_x
 
         canvas.setFillColor(colors.HexColor(color))
         canvas.setStrokeColor(self.frame_color)
@@ -166,7 +174,7 @@ class RackAufteilung(Flowable):
         canvas.rect(
             box_x,
             y + self.inset_y,
-            box_w,
+            box_width,
             height - 2 * self.inset_y,
             stroke=1,
             fill=1,
@@ -175,11 +183,11 @@ class RackAufteilung(Flowable):
         canvas.setStrokeColor(colors.black)
         canvas.setLineWidth(0.3)
         for offset in range(1, span):
-            line_y = y + offset * self.he_hoehe
-            canvas.line(box_x, line_y, box_x + box_w, line_y)
+            line_y = y + offset * self.rack_unit_height
+            canvas.line(box_x, line_y, box_x + box_width, line_y)
 
         text_x = self.rack_x + 5 * mm
-        text_width = self.rack_w - 23 * mm
+        text_width = self.rack_width - 23 * mm
         center_y = y + height / 2
 
         self.draw_text(
@@ -202,15 +210,17 @@ class RackAufteilung(Flowable):
                 max_width=text_width,
             )
 
-    def draw_he_numbers(self, canvas):
+    def draw_rack_unit_numbers(self, canvas):
         canvas.setFillColor(colors.black)
         canvas.setFont("Helvetica-Bold", 7)
 
-        for he in range(1, self.gesamt_he + 1):
+        for rack_unit in range(1, self.total_rack_units + 1):
             canvas.drawRightString(
-                self.rack_x + self.rack_w - 4 * mm,
-                self.he_y(he) + self.he_hoehe - 3.8 * mm,
-                f"{he} HE",
+                self.rack_x + self.rack_width - 4 * mm,
+                self.rack_unit_y(rack_unit)
+                + self.rack_unit_height
+                - 3.8 * mm,
+                f"{rack_unit} HE",
             )
 
     def draw(self):
@@ -220,144 +230,151 @@ class RackAufteilung(Flowable):
         for component in self.layout:
             self.draw_component(canvas, *component)
 
-        self.draw_he_numbers(canvas)
+        self.draw_rack_unit_numbers(canvas)
 
 
-def erstelle_pdf(hochformat=True):
-    """Erstellt Rack-Aufteilung und Portpläne in einer PDF."""
-    erstellt_am = datetime.now().astimezone()
-    unterzeile = erstellt_am.strftime("Stand: %d.%m.%Y – %H:%M Uhr")
+def create_pdf(portrait_orientation=True):
+    """Create the rack layout and port plans in a single PDF."""
+    created_at = datetime.now().astimezone()
+    created_at_text = created_at.strftime(
+        "Stand: %d.%m.%Y – %H:%M Uhr"
+    )
 
-    gesamt_he = RACK_INFO["gesamt_he"]
-    geprueftes_layout = pruefe_layout(RACK_LAYOUT, gesamt_he)
-    layout = ergaenze_reserven(geprueftes_layout, gesamt_he)
+    total_rack_units = RACK_INFO["total_rack_units"]
+    validated_layout = validate_layout(RACK_LAYOUT, total_rack_units)
+    layout = add_reserve_units(validated_layout, total_rack_units)
 
-    AUSGABEORDNER.mkdir(parents=True, exist_ok=True)
+    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    if ZEITSTEMPEL_IM_DATEINAMEN:
-        dateiname = erstellt_am.strftime(
-            "netzwerkschrank_dokumentation_%Y-%m-%d_%H-%M-%S.pdf"
+    if TIMESTAMP_IN_FILE_NAME:
+        file_name = created_at.strftime(
+            "network_rack_documentation_%Y-%m-%d_%H-%M-%S.pdf"
         )
     else:
-        dateiname = "netzwerkschrank_dokumentation.pdf"
+        file_name = "network_rack_documentation.pdf"
 
-    pdf_datei = AUSGABEORDNER / dateiname
+    pdf_file = OUTPUT_FOLDER / file_name
 
     doc = SimpleDocTemplate(
-        str(pdf_datei),
-        pagesize=portrait(A4) if hochformat else landscape(A4),
+        str(pdf_file),
+        pagesize=(
+            portrait(A4)
+            if portrait_orientation
+            else landscape(A4)
+        ),
         leftMargin=15 * mm,
         rightMargin=15 * mm,
         topMargin=15 * mm,
         bottomMargin=15 * mm,
-        title=TITEL,
+        title=DOCUMENT_TITLE,
     )
 
     styles = getSampleStyleSheet()
 
-    titel_stil = ParagraphStyle(
+    title_style = ParagraphStyle(
         "PortplanTitel", parent=styles["Title"],
         fontName="Helvetica-Bold", fontSize=16, leading=20,
         spaceAfter=6 * mm,
     )
-    untertitel_stil = ParagraphStyle(
+    subtitle_style = ParagraphStyle(
         "PortplanUntertitel", parent=styles["Normal"],
         fontSize=9, leading=12, textColor=colors.HexColor("#666666"),
     )
-    vlan_referenz_stil = ParagraphStyle(
+    vlan_reference_style = ParagraphStyle(
         "VlanReferenz", parent=styles["Normal"],
         fontSize=9, leading=12,
     )
-    zellen_stil = ParagraphStyle(
+    cell_style = ParagraphStyle(
         "PortplanZelle", parent=styles["Normal"],
         fontSize=9, leading=12,
     )
-    zentriert_stil = ParagraphStyle(
-        "PortplanZentriert", parent=zellen_stil, alignment=1,
+    centered_style = ParagraphStyle(
+        "PortplanZentriert", parent=cell_style, alignment=1,
     )
-    kopf_stil = ParagraphStyle(
-        "PortplanKopf", parent=zellen_stil,
+    header_style = ParagraphStyle(
+        "PortplanKopf", parent=cell_style,
         fontName="Helvetica-Bold", textColor=colors.white,
     )
 
-    def absatz(wert, stil):
-        text = "" if wert is None else str(wert)
-        return Paragraph(escape(text).replace("\n", "<br/>"), stil)
+    def paragraph(value, style):
+        text = "" if value is None else str(value)
+        return Paragraph(
+            escape(text).replace("\n", "<br/>"),
+            style,
+        )
 
-    def vlan_referenz_elemente():
-        if not VLAN_REFERENZ:
+    def vlan_reference_elements():
+        if not VLAN_REFERENCES:
             return []
 
         vlan_text = "<br/>".join(
             f"<b>VLAN {vlan_id}</b> – {escape(name)}"
-            for vlan_id, name in VLAN_REFERENZ
+            for vlan_id, name in VLAN_REFERENCES
         )
 
         return [
-            Paragraph(vlan_text, vlan_referenz_stil),
+            Paragraph(vlan_text, vlan_reference_style),
             Spacer(1, 6 * mm),
         ]
 
-    def rack_seite():
-        titel_hoehe = 28 * mm
-        abstand = 8 * mm
+    def rack_page():
+        title_height = 28 * mm
+        spacing = 8 * mm
 
-        verfuegbare_breite = doc.width
-        verfuegbare_hoehe = (
+        available_width = doc.width
+        available_height = (
             doc.height
-            - titel_hoehe
-            - abstand
+            - title_height
+            - spacing
         )
 
-        elemente = [
-            absatz(RACK_INFO["titel"], titel_stil),
-            absatz(RACK_INFO["untertitel"], untertitel_stil),
-            absatz(unterzeile, untertitel_stil),
+        return [
+            paragraph(RACK_INFO["title"], title_style),
+            paragraph(RACK_INFO["subtitle"], subtitle_style),
+            paragraph(created_at_text, subtitle_style),
             Spacer(1, 5 * mm),
-            RackAufteilung(
+            RackLayout(
                 layout=layout,
-                gesamt_he=gesamt_he,
-                breite=verfuegbare_breite,
-                hoehe=verfuegbare_hoehe,
+                total_rack_units=total_rack_units,
+                width=available_width,
+                height=available_height,
             ),
         ]
 
-        return elemente
-
-    def portplan_seite(komponente):
-        elemente = [
-            absatz(komponente["titel"], titel_stil),
-            absatz(unterzeile, untertitel_stil),
+    def port_plan_page(component):
+        elements = [
+            paragraph(component["title"], title_style),
+            paragraph(created_at_text, subtitle_style),
             Spacer(1, 5 * mm),
         ]
 
-        elemente.extend(vlan_referenz_elemente())
+        elements.extend(vlan_reference_elements())
 
-        daten = [[
-            absatz(name, kopf_stil)
+        data = [[
+            paragraph(name, header_style)
             for name in ("Port", "Ziel", "VLAN", "PoE", "Bemerkung")
         ]]
 
-        for port, ziel, vlan, poe, bemerkung in komponente["ports"]:
-            daten.append([
-                absatz(port, zentriert_stil),
-                absatz(ziel, zellen_stil),
-                absatz(vlan, zentriert_stil),
-                absatz(poe, zentriert_stil),
-                absatz(bemerkung, zellen_stil),
+        for port, destination, vlan, poe, remark in component["ports"]:
+            data.append([
+                paragraph(port, centered_style),
+                paragraph(destination, cell_style),
+                paragraph(vlan, centered_style),
+                paragraph(poe, centered_style),
+                paragraph(remark, cell_style),
             ])
 
-        tabelle = Table(
-            daten,
+        table = Table(
+            data,
             colWidths=[
-                doc.width * anteil
-                for anteil in (0.09, 0.30, 0.09, 0.09, 0.43)
+                doc.width * proportion
+                for proportion in (0.09, 0.30, 0.09, 0.09, 0.43)
             ],
             repeatRows=1,
             hAlign="LEFT",
         )
 
-        tabelle.setStyle(TableStyle([
+        table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4e79")),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b3bac3")),
@@ -369,31 +386,31 @@ def erstelle_pdf(hochformat=True):
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
 
-        elemente.append(tabelle)
-        return elemente
+        elements.append(table)
+        return elements
 
-    elemente = rack_seite()
+    elements = rack_page()
 
-    for komponente in RACK_COMPONENTS:
-        elemente.append(PageBreak())
-        elemente.extend(portplan_seite(komponente))
+    for component in RACK_COMPONENTS:
+        elements.append(PageBreak())
+        elements.extend(port_plan_page(component))
 
-    def fusszeile(canvas, dokument):
+    def footer(canvas, document):
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#666666"))
         canvas.drawRightString(
-            dokument.pagesize[0] - dokument.rightMargin,
+            document.pagesize[0] - document.rightMargin,
             9 * mm,
-            f"Seite {dokument.page}",
+            f"Seite {document.page}",
         )
         canvas.restoreState()
 
-    doc.build(elemente, onFirstPage=fusszeile, onLaterPages=fusszeile)
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
 
-    print(f"PDF erstellt: {pdf_datei}")
-    return pdf_datei
+    print(f"PDF created: {pdf_file}")
+    return pdf_file
 
 
 if __name__ == "__main__":
-    erstelle_pdf(hochformat=HOCHFORMAT)
+    create_pdf(portrait_orientation=PORTRAIT_ORIENTATION)

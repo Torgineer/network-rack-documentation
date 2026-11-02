@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Konfigurationsdaten für die Netzwerkschrank-Dokumentation."""
+"""Configuration data for the network rack documentation."""
 
-# Allgemeine Informationen zum Netzwerkschrank.
+# General information about the network rack.
 RACK_INFO = {
-    "titel": "Netzwerkschrank-Aufteilung",
-    "gesamt_he": 16,
-    "untertitel": (
+    "title": "Netzwerkschrank-Aufteilung",
+    "total_rack_units": 16,
+    "subtitle": (
         '19" Wandschrank, 16 HE, 450 mm Tiefe, Glastür – '
         "Digitus Digital Basic"
     ),
 }
 
-# Aufbau des Netzwerkschranks.
-# Format: (oberste HE, Anzahl HE, Name, Untertitel, Farbe)
+# Layout of the network rack.
+# Format: (top rack unit, number of rack units, name, subtitle, color)
 RACK_LAYOUT = [
     (15, 1, "FRITZ!Box 5690",
      "auf Fachboden, WAN von hinten", "#FFE0B2"),
@@ -30,11 +30,11 @@ RACK_LAYOUT = [
      "Netzkabel getrennt von Datenkabeln", "#FFCC80"),
 ]
 
-# Farbe für nicht belegte Höheneinheiten.
+# Color for unoccupied rack units.
 RESERVE_COLOR = "#F5F5F5"
 
-# VLAN-Referenzliste: (VLAN-ID, Name)
-VLAN_REFERENZ = [
+# VLAN reference list: (VLAN ID, name)
+VLAN_REFERENCES = [
     (1, "Default"),
     (10, "Home"),
     (20, "IoT"),
@@ -42,13 +42,13 @@ VLAN_REFERENZ = [
     (40, "Camera"),
 ]
 
-# Komponenten im Netzwerkschrank.
-# Jede Komponente erhält eine eigene Seite in der PDF.
-# "ports" enthält Einträge im Format:
-# (Port, Ziel, VLAN, PoE, Bemerkung)
+# Components in the network rack.
+# Each component receives its own page in the PDF.
+# "ports" contains entries in the format:
+# (port, destination, VLAN, PoE, remark)
 RACK_COMPONENTS = [
     {
-        "titel": "Patchpanel-Portplan",
+        "title": "Patchpanel-Portplan",
         "ports": [
             (1, "Flur 1", "", "", "WAN"),
             (2, "Büro", "1", "Ja", "Access Point - U7 In-Wall"),
@@ -77,7 +77,7 @@ RACK_COMPONENTS = [
         ],
     },
     {
-        "titel": "Switch-Portplan Lite-8-PoE",
+        "title": "Switch-Portplan Lite-8-PoE",
         "ports": [
             (1, "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall", "1", "Ja", ""),
             (2, "Patchpanel Port 3\nWohnzimmer: Access Point - U6+", "1", "Ja", ""),
@@ -90,7 +90,7 @@ RACK_COMPONENTS = [
         ],
     },
     {
-        "titel": "UCG-Ultra-Portplan",
+        "title": "UCG-Ultra-Portplan",
         "ports": [
             (1, "Switch Lite-8-PoE", "1", "Nein", ""),
             (2, "", "", "", ""),
