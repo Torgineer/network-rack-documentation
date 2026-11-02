@@ -14,20 +14,20 @@ RACK_INFO = {
 # Layout of the network rack.
 # Format: (top rack unit, number of rack units, name, subtitle, color)
 RACK_LAYOUT = [
-    (15, 1, "FRITZ!Box 5690",
-     "auf Fachboden, WAN von hinten", "#FFE0B2"),
+    (15, 1, "FRITZ!Box 5690 Fiber",
+     "", "#FFE0B2"),
     (13, 1, "UniFi Cloud Gateway Ultra",
-     "1U-Rackmount, direkt unter FRITZ!Box", "#C8E6C9"),
+     "", "#C8E6C9"),
+    (13, 1, "UniFi Switch Lite 8 PoE",
+     '', "#C8E6C9"),
     (12, 1, "Patchfeld 24 Port",
-     "CAT7 von oben, Anschluss von hinten", "#BBDEFB"),
-    (11, 1, "UniFi Switch Lite 8 PoE",
-     '19"-Rackmount, direkt unter Patchfeld', "#C8E6C9"),
+     "Keystone", "#BBDEFB"),
     (9, 2, "UniFi UNVR Instant",
-     "2U-Rackmount – belegt HE 8 und 9", "#F8BBD0"),
+     "2HE", "#F8BBD0"),
     (7, 1, "Tiny PC Lenovo M720q",
-     "auf Fachboden", "#D1C4E9"),
+     "", "#D1C4E9"),
     (1, 1, "Steckdosenleiste",
-     "Netzkabel getrennt von Datenkabeln", "#FFCC80"),
+     "", "#FFCC80"),
 ]
 
 # Color for unoccupied rack units.

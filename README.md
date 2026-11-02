@@ -10,6 +10,8 @@ The PDF file name and console output are in English. The visible content of the 
 
 - Network rack layout as the first page of the PDF.
 - Rack size is configured using `RACK_INFO["total_rack_units"]`.
+- Multiple components can share one rack unit row.
+- A shared rack unit row is automatically divided equally between its components.
 - Unoccupied rack units are automatically displayed as reserve space.
 - Separate port plans for the patch panel, switch, and UCG-Ultra in one PDF.
 - Automatic creation of one PDF page per component from `RACK_COMPONENTS`.
@@ -92,20 +94,20 @@ The `RACK_LAYOUT` list in `data/rack_data.py` defines the components installed i
 ```python
 # Format: (top rack unit, number of rack units, name, subtitle, color)
 RACK_LAYOUT = [
-    (15, 1, "FRITZ!Box 5690",
-     "auf Fachboden, WAN von hinten", "#FFE0B2"),
+    (15, 1, "FRITZ!Box 5690 Fiber",
+     "", "#FFE0B2"),
     (13, 1, "UniFi Cloud Gateway Ultra",
-     "1U-Rackmount, direkt unter FRITZ!Box", "#C8E6C9"),
+     "", "#C8E6C9"),
+    (13, 1, "UniFi Switch Lite 8 PoE",
+     "", "#C8E6C9"),
     (12, 1, "Patchfeld 24 Port",
-     "CAT7 von oben, Anschluss von hinten", "#BBDEFB"),
-    (11, 1, "UniFi Switch Lite 8 PoE",
-     '19"-Rackmount, direkt unter Patchfeld', "#C8E6C9"),
+     "Keystone", "#BBDEFB"),
     (9, 2, "UniFi UNVR Instant",
-     "2U-Rackmount – belegt HE 8 und 9", "#F8BBD0"),
+     "2HE", "#F8BBD0"),
     (7, 1, "Tiny PC Lenovo M720q",
-     "auf Fachboden", "#D1C4E9"),
+     "", "#D1C4E9"),
     (1, 1, "Steckdosenleiste",
-     "Netzkabel getrennt von Datenkabeln", "#FFCC80"),
+     "", "#FFCC80"),
 ]
 ```
 
@@ -114,10 +116,36 @@ RACK_LAYOUT = [
 | Top rack unit | Highest occupied rack unit of the component | `15` |
 | Number of rack units | Number of occupied rack units | `2` |
 | Name | Name of the component | `"UniFi UNVR Instant"` |
-| Subtitle | Additional mounting or connection information | `"2U-Rackmount"` |
+| Subtitle | Additional mounting or connection information | `"2HE"` |
 | Color | Background color in the rack layout | `"#F8BBD0"` |
 
-A component with `top = 9` and `span = 2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are sorted by their position in the rack.
+A component with `top = 9` and `span = 2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are grouped and sorted by their position in the rack.
+
+### Sharing a rack unit row
+
+Multiple components can share the same rack unit row if they have exactly the same top rack unit and the same number of rack units.
+
+For example, these two components share rack unit 13:
+
+```python
+(13, 1, "UniFi Cloud Gateway Ultra",
+ "", "#C8E6C9"),
+(13, 1, "UniFi Switch Lite 8 PoE",
+ "", "#C8E6C9"),
+```
+
+The rack layout automatically divides this row into two equally sized fields:
+
+```text
+┌──────────────────────┬──────────────────────┐
+│ UniFi Cloud Gateway  │ UniFi Switch Lite    │
+│ Ultra                │ 8 PoE                │
+└──────────────────────┴──────────────────────┘
+```
+
+If three components use the same rack unit range, the row is divided into three equally sized fields. The vertical divider lines use the same gray color as the component frames.
+
+Only components with an identical `(top, span)` combination can share a row. Overlapping but different ranges, such as `(13, 1)` and `(12, 1)`, are still rejected as conflicting occupancy.
 
 Unoccupied rack units are automatically added as reserve space and displayed using `RESERVE_COLOR`:
 
@@ -125,7 +153,7 @@ Unoccupied rack units are automatically added as reserve space and displayed usi
 RESERVE_COLOR = "#F5F5F5"
 ```
 
-The script checks whether rack units are outside the cabinet or occupied more than once. If the layout is invalid, PDF creation is aborted with an error message.
+The script checks whether rack units are outside the cabinet or occupied by conflicting component ranges. If the layout is invalid, PDF creation is aborted with an error message.
 
 ## Configuring the VLAN reference list
 

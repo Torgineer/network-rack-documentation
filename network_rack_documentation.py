@@ -46,13 +46,14 @@ OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 
 
 def validate_layout(layout, total_rack_units):
-    """Validate rack unit ranges and duplicate occupancy."""
+    """Validate rack unit ranges and conflicting occupancy."""
     if total_rack_units < 1:
         raise ValueError(
             "RACK_INFO['total_rack_units'] must be at least 1."
         )
 
     available_rack_units = set(range(1, total_rack_units + 1))
+    known_ranges = set()
 
     for top, span, label, *_ in layout:
         if type(top) is not int or type(span) is not int:
@@ -65,11 +66,16 @@ def validate_layout(layout, total_rack_units):
             raise ValueError(f"{label}: invalid rack unit range.")
 
         occupied_rack_units = set(range(top - span + 1, top + 1))
+        rack_unit_range = (top, span)
 
-        if not occupied_rack_units <= available_rack_units:
-            raise ValueError(f"{label}: rack unit is occupied twice.")
+        if rack_unit_range not in known_ranges:
+            if not occupied_rack_units <= available_rack_units:
+                raise ValueError(
+                    f"{label}: rack unit is occupied twice."
+                )
 
-        available_rack_units -= occupied_rack_units
+            available_rack_units -= occupied_rack_units
+            known_ranges.add(rack_unit_range)
 
     return layout
 
@@ -93,6 +99,19 @@ def add_reserve_units(layout, total_rack_units):
 
     return sorted(layout + reserve_units, reverse=True)
 
+def group_components(layout):
+    """Group components that occupy the same rack unit range."""
+    groups = {}
+
+    for component in layout:
+        top, span = component[0], component[1]
+        groups.setdefault((top, span), []).append(component)
+
+    return sorted(
+        groups.values(),
+        key=lambda group: group[0][0],
+        reverse=True,
+    )
 
 class RackLayout(Flowable):
     """Draw the network rack layout as a flowable for the PDF."""
@@ -162,32 +181,25 @@ class RackLayout(Flowable):
             ):
                 canvas.circle(x, y, 1.1 * mm)
 
-    def draw_component(self, canvas, top, span, label, subtitle, color):
+    def draw_component(self, canvas, component, x, width):
+        top, span, label, subtitle, color = component
         y = self.rack_unit_y(top - span + 1)
         height = span * self.rack_unit_height
-        box_x = self.rack_x + self.inset_x
-        box_width = self.rack_width - 2 * self.inset_x
 
         canvas.setFillColor(colors.HexColor(color))
         canvas.setStrokeColor(self.frame_color)
         canvas.setLineWidth(1)
         canvas.rect(
-            box_x,
+            x,
             y + self.inset_y,
-            box_width,
+            width,
             height - 2 * self.inset_y,
             stroke=1,
             fill=1,
         )
 
-        canvas.setStrokeColor(colors.black)
-        canvas.setLineWidth(0.3)
-        for offset in range(1, span):
-            line_y = y + offset * self.rack_unit_height
-            canvas.line(box_x, line_y, box_x + box_width, line_y)
-
-        text_x = self.rack_x + 5 * mm
-        text_width = self.rack_width - 23 * mm
+        text_x = x + 3 * mm
+        text_width = width - 6 * mm
         center_y = y + height / 2
 
         self.draw_text(
@@ -227,8 +239,43 @@ class RackLayout(Flowable):
         canvas = self.canv
         self.draw_rack(canvas)
 
-        for component in self.layout:
-            self.draw_component(canvas, *component)
+        box_x = self.rack_x + self.inset_x
+        total_box_width = self.rack_width - 2 * self.inset_x
+
+        for group in group_components(self.layout):
+            component_count = len(group)
+            group_width = total_box_width / component_count
+
+            for index, component in enumerate(group):
+                x = box_x + index * group_width
+                self.draw_component(
+                    canvas,
+                    component,
+                    x,
+                    group_width,
+                )
+
+            if component_count > 1:
+                canvas.setStrokeColor(self.frame_color)
+                canvas.setLineWidth(1)
+
+                top = group[0][0]
+                span = group[0][1]
+                y = self.rack_unit_y(top - span + 1) + self.inset_y
+                height = (
+                    span * self.rack_unit_height
+                    - 2 * self.inset_y
+                )
+
+                for index in range(1, component_count):
+                    divider_x = box_x + index * group_width
+
+                    canvas.line(
+                        divider_x,
+                        y,
+                        divider_x,
+                        y + height,
+                    )
 
         self.draw_rack_unit_numbers(canvas)
 
