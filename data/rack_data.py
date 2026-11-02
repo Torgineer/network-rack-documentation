@@ -1,7 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Configuration data for the network rack documentation."""
+"""Configuration data for the network rack documentation.
+
+This module contains all user-editable input data used to generate the
+network rack documentation PDF. It separates the rack configuration
+from the PDF generation logic in ``network_rack_documentation.py``.
+
+The visible PDF content remains in German.
+"""
+
 
 # General information about the network rack.
+#
+# "title" is displayed as the heading of the rack layout page.
+# "total_rack_units" defines the physical size of the cabinet and is
+# not calculated from the highest occupied rack unit. This allows
+# unoccupied rack units to be displayed correctly as reserve space.
+# "subtitle" describes the cabinet and is displayed below the title.
 RACK_INFO = {
     "title": "Netzwerkschrank-Aufteilung",
     "total_rack_units": 16,
@@ -11,8 +25,22 @@ RACK_INFO = {
     ),
 }
 
+
 # Layout of the network rack.
-# Format: (top rack unit, number of rack units, name, subtitle, color)
+#
+# Each entry describes one component installed in the cabinet.
+# Format:
+#   (top rack unit, number of rack units, name, subtitle, color)
+#
+# "top rack unit" is the highest occupied rack unit.
+# "number of rack units" is the height of the component in rack units.
+# "subtitle" can be empty and is displayed below the component name.
+# "color" is the background color of the component in the rack layout.
+#
+# Components with an identical top rack unit and an identical number of
+# rack units share one rack unit row. The PDF generator divides such a
+# row equally between all components in the group. For example, two
+# entries with (13, 1) are displayed side by side in rack unit 13.
 RACK_LAYOUT = [
     (15, 1, "FRITZ!Box 5690 Fiber",
      "", "#FFE0B2"),
@@ -30,10 +58,18 @@ RACK_LAYOUT = [
      "", "#FFCC80"),
 ]
 
-# Color for unoccupied rack units.
+
+# Background color for rack units that are not occupied by a component.
 RESERVE_COLOR = "#F5F5F5"
 
-# VLAN reference list: (VLAN ID, name)
+
+# VLAN reference list displayed above every port table.
+#
+# Format:
+#   (VLAN ID, name)
+#
+# The order of the entries determines the order in the PDF. The list
+# can be empty, in which case no VLAN reference is displayed.
 VLAN_REFERENCES = [
     (1, "Default"),
     (10, "Home"),
@@ -42,10 +78,27 @@ VLAN_REFERENCES = [
     (40, "Camera"),
 ]
 
+
 # Components in the network rack.
-# Each component receives its own page in the PDF.
-# "ports" contains entries in the format:
-# (port, destination, VLAN, PoE, remark)
+#
+# Each component receives its own page in the generated PDF. The order
+# of the entries determines the order of the PDF pages.
+#
+# Each component requires:
+#   "title": Heading of the component page.
+#   "ports": List of port entries for the component.
+#
+# Each port entry uses the following format:
+#   (port, destination, VLAN, PoE, remark)
+#
+# "port" is the port number of the component.
+# "destination" is the connected room, device, or connection.
+# "VLAN" is the VLAN ID and can be empty for an unassigned VLAN.
+# "PoE" contains manually maintained PoE information.
+# "remark" is free text for additional information.
+#
+# Use "\n" inside "destination" or "remark" to create a manual line
+# break in the PDF table.
 RACK_COMPONENTS = [
     {
         "title": "Patchpanel-Portplan",

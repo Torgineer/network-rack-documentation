@@ -8,6 +8,7 @@ Installation: python -m pip install reportlab
 Start: python network_rack_documentation.py
 """
 
+
 from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -29,16 +30,19 @@ from data.rack_data import (
     VLAN_REFERENCES,
 )
 
+
 # =============================================================
 # SETTINGS – adjust manually here
 # =============================================================
+
+# Title shown in the PDF document properties.
 DOCUMENT_TITLE = "Netzwerkschrank – Dokumentation"
 
 # True: A4 portrait / False: A4 landscape
 PORTRAIT_ORIENTATION = True
 
 # True: save every PDF with a timestamp in its file name.
-# False: overwrite netzwerkschrank_dokumentation.pdf on every run.
+# False: overwrite network_rack_documentation.pdf on every run.
 TIMESTAMP_IN_FILE_NAME = True
 
 # Output folder next to this Python file.
@@ -46,7 +50,25 @@ OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 
 
 def validate_layout(layout, total_rack_units):
-    """Validate rack unit ranges and conflicting occupancy."""
+    """Validate rack unit ranges and conflicting occupancy.
+
+    Components may share a rack unit row only if they have exactly the
+    same top rack unit and the same number of rack units. This allows,
+    for example, two devices to be mounted side by side in one rack
+    unit. Overlapping but different ranges are rejected.
+
+    Args:
+        layout: Rack components in the format
+            (top rack unit, number of rack units, name, subtitle, color).
+        total_rack_units: Total number of rack units in the cabinet.
+
+    Returns:
+        The validated rack layout.
+
+    Raises:
+        ValueError: If a rack unit range is invalid or conflicts with
+            another, non-identical component range.
+    """
     if total_rack_units < 1:
         raise ValueError(
             "RACK_INFO['total_rack_units'] must be at least 1."
@@ -68,6 +90,8 @@ def validate_layout(layout, total_rack_units):
         occupied_rack_units = set(range(top - span + 1, top + 1))
         rack_unit_range = (top, span)
 
+        # Identical ranges are allowed because multiple components can
+        # be mounted side by side in the same rack unit row.
         if rack_unit_range not in known_ranges:
             if not occupied_rack_units <= available_rack_units:
                 raise ValueError(
@@ -81,7 +105,16 @@ def validate_layout(layout, total_rack_units):
 
 
 def add_reserve_units(layout, total_rack_units):
-    """Add all unoccupied rack units as reserve space."""
+    """Add all unoccupied rack units as reserve space.
+
+    Args:
+        layout: Validated rack components.
+        total_rack_units: Total number of rack units in the cabinet.
+
+    Returns:
+        Rack components and reserve units, sorted from the top of the
+        cabinet to the bottom.
+    """
     occupied_rack_units = set()
 
     for top, span, *_ in layout:
@@ -99,8 +132,21 @@ def add_reserve_units(layout, total_rack_units):
 
     return sorted(layout + reserve_units, reverse=True)
 
+
 def group_components(layout):
-    """Group components that occupy the same rack unit range."""
+    """Group components that occupy the same rack unit range.
+
+    Components with an identical (top, span) range share one rack unit
+    row. The drawing code divides such a row equally between all
+    components in the group.
+
+    Args:
+        layout: Rack components and reserve units.
+
+    Returns:
+        A list of component groups, sorted from the top of the cabinet
+        to the bottom.
+    """
     groups = {}
 
     for component in layout:
@@ -113,10 +159,20 @@ def group_components(layout):
         reverse=True,
     )
 
+
 class RackLayout(Flowable):
     """Draw the network rack layout as a flowable for the PDF."""
 
     def __init__(self, layout, total_rack_units, width, height):
+        """Initialize the rack layout drawing.
+
+        Args:
+            layout: Rack components and automatically added reserve
+                units.
+            total_rack_units: Total number of rack units in the cabinet.
+            width: Available width for the rack drawing.
+            height: Available height for the rack drawing.
+        """
         super().__init__()
         self.layout = layout
         self.total_rack_units = total_rack_units
@@ -124,29 +180,72 @@ class RackLayout(Flowable):
         self.height = height
 
         self.rack_x = 0
-        self.rack_width = width * 0.52
         self.rack_bottom = 0
         self.rack_top = height
         self.rack_unit_height = height / total_rack_units
 
+        # Draw the rack on the left side of the page. The remaining
+        # width is intentionally unused to keep the layout readable.
+        self.rack_width = width * 0.52
+
+        # Small inset prevents component boxes from overlapping the
+        # rack frame and rack unit boundaries.
         self.inset_x = 1.2 * mm
         self.inset_y = 0.6 * mm
+
+        # Color used for component frames and dividers between
+        # components sharing one rack unit row.
         self.frame_color = colors.HexColor("#555555")
 
     def wrap(self, available_width, available_height):
+        """Return the fixed width and height of the rack layout.
+
+        Args:
+            available_width: Width available from the PDF layout engine.
+            available_height: Height available from the PDF layout
+                engine.
+
+        Returns:
+            Tuple containing the fixed width and height.
+        """
         return self.width, self.height
 
     def rack_unit_y(self, rack_unit):
+        """Return the PDF y-coordinate of the bottom edge of a rack unit.
+
+        Rack units are numbered from top to bottom, while PDF
+        coordinates increase from bottom to top.
+
+        Args:
+            rack_unit: Rack unit number, starting at 1 at the bottom.
+
+        Returns:
+            Y-coordinate of the lower boundary of the rack unit.
+        """
         return self.rack_bottom + (
             (rack_unit - 1) * self.rack_unit_height
         )
 
     def draw_text(self, canvas, x, y, text, size=9, bold=False,
                   max_width=None):
+        """Draw text and reduce its font size if it exceeds max_width.
+
+        Args:
+            canvas: ReportLab canvas to draw on.
+            x: X-coordinate of the text.
+            y: Y-coordinate of the text.
+            text: Text to draw.
+            size: Initial font size in points.
+            bold: Whether to use a bold font.
+            max_width: Maximum available text width in points.
+        """
         font = "Helvetica-Bold" if bold else "Helvetica"
 
         if max_width is not None:
             text_width = canvas.stringWidth(text, font, size)
+
+            # Scale the font size down instead of allowing long labels
+            # to overlap neighboring components.
             if text_width > max_width:
                 size *= max_width / text_width
 
@@ -155,6 +254,7 @@ class RackLayout(Flowable):
         canvas.drawString(x, y, text)
 
     def draw_rack(self, canvas):
+        """Draw the rack frame, rack unit boundaries and mounting holes."""
         canvas.setStrokeColor(colors.black)
         canvas.setLineWidth(1.2)
         canvas.rect(
@@ -167,6 +267,8 @@ class RackLayout(Flowable):
         for boundary in range(self.total_rack_units + 1):
             y = self.rack_unit_y(boundary + 1)
 
+            # Draw internal rack unit boundaries, but not the outer
+            # frame boundaries.
             if 0 < boundary < self.total_rack_units:
                 canvas.setLineWidth(0.3)
                 canvas.line(
@@ -174,6 +276,7 @@ class RackLayout(Flowable):
                     self.rack_x + self.rack_width, y,
                 )
 
+            # Draw mounting holes at every rack unit boundary.
             canvas.setLineWidth(0.5)
             for x in (
                 self.rack_x + 3 * mm,
@@ -182,6 +285,16 @@ class RackLayout(Flowable):
                 canvas.circle(x, y, 1.1 * mm)
 
     def draw_component(self, canvas, component, x, width):
+        """Draw one component inside the specified horizontal area.
+
+        Args:
+            canvas: ReportLab canvas to draw on.
+            component: Component in the format
+                (top rack unit, number of rack units, name, subtitle,
+                color).
+            x: Left x-coordinate of the component box.
+            width: Width of the component box.
+        """
         top, span, label, subtitle, color = component
         y = self.rack_unit_y(top - span + 1)
         height = span * self.rack_unit_height
@@ -223,6 +336,7 @@ class RackLayout(Flowable):
             )
 
     def draw_rack_unit_numbers(self, canvas):
+        """Draw the rack unit numbers on the right side of the rack."""
         canvas.setFillColor(colors.black)
         canvas.setFont("Helvetica-Bold", 7)
 
@@ -236,6 +350,7 @@ class RackLayout(Flowable):
             )
 
     def draw(self):
+        """Draw the complete rack layout, including shared rack unit rows."""
         canvas = self.canv
         self.draw_rack(canvas)
 
@@ -244,6 +359,9 @@ class RackLayout(Flowable):
 
         for group in group_components(self.layout):
             component_count = len(group)
+
+            # Divide a shared rack unit row equally between its
+            # components.
             group_width = total_box_width / component_count
 
             for index, component in enumerate(group):
@@ -267,6 +385,8 @@ class RackLayout(Flowable):
                     - 2 * self.inset_y
                 )
 
+                # Draw vertical dividers between components sharing the
+                # same rack unit row.
                 for index in range(1, component_count):
                     divider_x = box_x + index * group_width
 
@@ -281,7 +401,15 @@ class RackLayout(Flowable):
 
 
 def create_pdf(portrait_orientation=True):
-    """Create the rack layout and port plans in a single PDF."""
+    """Create the rack layout and port plans in a single PDF.
+
+    Args:
+        portrait_orientation: Whether to create the PDF in A4 portrait
+            format. If False, A4 landscape format is used.
+
+    Returns:
+        Path to the generated PDF file.
+    """
     created_at = datetime.now().astimezone()
     created_at_text = created_at.strftime(
         "Stand: %d.%m.%Y – %H:%M Uhr"
@@ -344,6 +472,16 @@ def create_pdf(portrait_orientation=True):
     )
 
     def paragraph(value, style):
+        """Convert a value into an escaped ReportLab paragraph.
+
+        Args:
+            value: Text, number, or None.
+            style: ReportLab paragraph style.
+
+        Returns:
+            ReportLab paragraph with escaped text and support for
+            manual line breaks.
+        """
         text = "" if value is None else str(value)
         return Paragraph(
             escape(text).replace("\n", "<br/>"),
@@ -351,6 +489,12 @@ def create_pdf(portrait_orientation=True):
         )
 
     def vlan_reference_elements():
+        """Create the VLAN reference list shown above each port table.
+
+        Returns:
+            List of PDF elements, or an empty list if no VLANs are
+            configured.
+        """
         if not VLAN_REFERENCES:
             return []
 
@@ -365,6 +509,13 @@ def create_pdf(portrait_orientation=True):
         ]
 
     def rack_page():
+        """Create the PDF elements for the network rack layout page.
+
+        Returns:
+            List of PDF elements for the first page.
+        """
+        # Reserve vertical space for the page title, subtitle and
+        # timestamp.
         title_height = 28 * mm
         spacing = 8 * mm
 
@@ -389,6 +540,15 @@ def create_pdf(portrait_orientation=True):
         ]
 
     def port_plan_page(component):
+        """Create the PDF elements for one component port plan page.
+
+        Args:
+            component: Component configuration containing a title and a
+                list of port entries.
+
+        Returns:
+            List of PDF elements for the component page.
+        """
         elements = [
             paragraph(component["title"], title_style),
             paragraph(created_at_text, subtitle_style),
@@ -438,11 +598,18 @@ def create_pdf(portrait_orientation=True):
 
     elements = rack_page()
 
+    # Create one separate PDF page for every configured component.
     for component in RACK_COMPONENTS:
         elements.append(PageBreak())
         elements.extend(port_plan_page(component))
 
     def footer(canvas, document):
+        """Draw the page number in the bottom-right corner.
+
+        Args:
+            canvas: ReportLab canvas to draw on.
+            document: ReportLab document being rendered.
+        """
         canvas.saveState()
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#666666"))
