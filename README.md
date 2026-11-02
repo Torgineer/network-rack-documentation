@@ -1,6 +1,6 @@
 # Network Rack Documentation
 
-Python script for creating network rack documentation as a PDF. The input data is stored in `data/rack_data.py`. The PDF generation is located in `network_rack_documentation.py`.
+Python script for creating network rack documentation as a PDF. The input data is stored in `data/rack_data.py`. The data structures (dataclasses) are defined in `data/models.py`. The PDF generation is located in `network_rack_documentation.py`.
 
 The PDF contains the network rack layout as well as separate pages for the patch panel, switch, and UCG-Ultra. Each component receives its own heading and port table. New components are added exclusively in the data file.
 
@@ -9,12 +9,12 @@ The PDF file name and console output are in English. The visible content of the 
 ## Features
 
 - Network rack layout as the first page of the PDF.
-- Rack size is configured using `RACK_INFO["total_rack_units"]`.
+- Rack size is configured using `RACK_INFO.total_rack_units`.
 - Multiple components can share one rack unit row.
 - A shared rack unit row is automatically divided equally between its components.
 - Unoccupied rack units are automatically displayed as reserve space.
 - Separate port plans for the patch panel, switch, and UCG-Ultra in one PDF.
-- Automatic creation of one PDF page per component from `RACK_COMPONENTS`.
+- Automatic creation of one PDF page per port plan from `PORT_PLANS`.
 - VLAN reference list above each port table.
 - Table with the columns **Port**, **Ziel**, **VLAN**, **PoE**, and **Bemerkung**.
 - A4 portrait format by default, with optional A4 landscape format.
@@ -25,6 +25,8 @@ The PDF file name and console output are in English. The visible content of the 
 - Repeated table header on subsequent pages.
 - Page numbers in the footer.
 - Alternating row colors for better readability.
+- Typed dataclasses for rack information, rack components, VLANs, and port entries.
+- All layout values (sizes, margins, colors, line widths) are named constants.
 
 ## Requirements
 
@@ -48,7 +50,7 @@ py -m pip install reportlab
 ## Usage
 
 1. Open `data/rack_data.py`.
-2. Adjust `RACK_INFO`, `RACK_LAYOUT`, the VLAN reference list, and `RACK_COMPONENTS`.
+2. Adjust `RACK_INFO`, `RACK_LAYOUT`, `VLAN_REFERENCES`, and `PORT_PLANS`.
 3. Adjust the settings in `network_rack_documentation.py` if necessary.
 4. Save the files and run the script from the project root directory:
 
@@ -64,19 +66,31 @@ py network_rack_documentation.py
 
 The PDF is saved in the `output` folder next to the Python file. The folder is created automatically if necessary. After successful creation, the script prints the full path to the PDF in the terminal.
 
+## Data model
+
+The data classes are defined in `data/models.py` and are used in `data/rack_data.py`. All of them are immutable (`frozen=True`).
+
+| Class | Purpose |
+| --- | --- |
+| `RackInfo` | General information about the cabinet |
+| `RackComponent` | A component mounted in the rack (also used internally for reserve units) |
+| `VlanReference` | One entry of the VLAN reference list |
+| `PortEntry` | One row of a port plan table |
+| `PortPlan` | A port plan page: title and list of `PortEntry` objects |
+
 ## Configuring the network rack
 
 The general information about the network rack is stored in `RACK_INFO` in `data/rack_data.py`:
 
 ```python
-RACK_INFO = {
-    "title": "Netzwerkschrank-Aufteilung",
-    "total_rack_units": 16,
-    "subtitle": (
+RACK_INFO = RackInfo(
+    title="Netzwerkschrank-Aufteilung",
+    total_rack_units=16,
+    subtitle=(
         '19" Wandschrank, 16 HE, 450 mm Tiefe, Glastür – '
         "Digitus Digital Basic"
     ),
-}
+)
 ```
 
 | Field | Meaning |
@@ -89,65 +103,95 @@ The rack size is defined by `total_rack_units`. It is not calculated from the hi
 
 ## Configuring the rack layout
 
-The `RACK_LAYOUT` list in `data/rack_data.py` defines the components installed in the cabinet:
+The `RACK_LAYOUT` list in `data/rack_data.py` defines the components installed in the cabinet. Each entry is a `RackComponent`:
 
 ```python
-# Format: (top rack unit, number of rack units, name, subtitle, color)
 RACK_LAYOUT = [
-    (15, 1, "FRITZ!Box 5690 Fiber",
-     "", "#FFE0B2"),
-    (13, 1, "UniFi Cloud Gateway Ultra",
-     "", "#C8E6C9"),
-    (13, 1, "UniFi Switch Lite 8 PoE",
-     "", "#C8E6C9"),
-    (12, 1, "Patchfeld 24 Port",
-     "Keystone", "#BBDEFB"),
-    (9, 2, "UniFi UNVR Instant",
-     "2HE", "#F8BBD0"),
-    (7, 1, "Tiny PC Lenovo M720q",
-     "", "#D1C4E9"),
-    (1, 1, "Steckdosenleiste",
-     "", "#FFCC80"),
+    RackComponent(
+        top_unit=15, unit_count=1,
+        name="FRITZ!Box 5690 Fiber",
+        color="#FFE0B2",
+    ),
+    RackComponent(
+        top_unit=13, unit_count=1,
+        name="UniFi Cloud Gateway Ultra",
+        color="#C8E6C9",
+    ),
+    RackComponent(
+        top_unit=13, unit_count=1,
+        name="UniFi Switch Lite 8 PoE",
+        color="#C8E6C9",
+    ),
+    RackComponent(
+        top_unit=12, unit_count=1,
+        name="Patchfeld 24 Port",
+        subtitle="Keystone",
+        color="#BBDEFB",
+    ),
+    RackComponent(
+        top_unit=9, unit_count=2,
+        name="UniFi UNVR Instant",
+        subtitle="2HE",
+        color="#F8BBD0",
+    ),
+    RackComponent(
+        top_unit=7, unit_count=1,
+        name="Tiny PC Lenovo M720q",
+        color="#D1C4E9",
+    ),
+    RackComponent(
+        top_unit=1, unit_count=1,
+        name="Steckdosenleiste",
+        color="#FFCC80",
+    ),
 ]
 ```
 
 | Field | Meaning | Example |
 | --- | --- | --- |
-| Top rack unit | Highest occupied rack unit of the component | `15` |
-| Number of rack units | Number of occupied rack units | `2` |
-| Name | Name of the component | `"UniFi UNVR Instant"` |
-| Subtitle | Additional mounting or connection information | `"2HE"` |
-| Color | Background color in the rack layout | `"#F8BBD0"` |
+| `top_unit` | Highest occupied rack unit of the component | `15` |
+| `unit_count` | Number of occupied rack units | `2` |
+| `name` | Name of the component | `"UniFi UNVR Instant"` |
+| `color` | Background color in the rack layout | `"#F8BBD0"` |
+| `subtitle` | Optional additional mounting or connection information (default: empty) | `"2HE"` |
 
-A component with `top = 9` and `span = 2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are grouped and sorted by their position in the rack.
+A component with `top_unit=9` and `unit_count=2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are grouped and sorted by their position in the rack.
 
 ### Sharing a rack unit row
 
-Multiple components can share the same rack unit row if they have exactly the same top rack unit and the same number of rack units.
+Multiple components can share the same rack unit row if they have exactly the same `top_unit` and the same `unit_count`.
 
 For example, these two components share rack unit 13:
 
 ```python
-(13, 1, "UniFi Cloud Gateway Ultra",
- "", "#C8E6C9"),
-(13, 1, "UniFi Switch Lite 8 PoE",
- "", "#C8E6C9"),
+RackComponent(
+    top_unit=13, unit_count=1,
+    name="UniFi Cloud Gateway Ultra",
+    color="#C8E6C9",
+),
+RackComponent(
+    top_unit=13, unit_count=1,
+    name="UniFi Switch Lite 8 PoE",
+    color="#C8E6C9",
+),
 ```
 
 The rack layout automatically divides this row into two equally sized fields:
 
 ```text
 ┌──────────────────────┬──────────────────────┐
-│ UniFi Cloud Gateway  │ UniFi Switch Lite    │
-│ Ultra                │ 8 PoE                │
+│ UniFi Switch Lite    │ UniFi Cloud Gateway  │
+│ 8 PoE                │ Ultra                │
 └──────────────────────┴──────────────────────┘
 ```
 
+Components within a shared row are ordered by the same sort key as the rest of the layout (top unit, unit count, name, subtitle, color, in descending order), so the order of entries in `RACK_LAYOUT` does not change which component appears on the left.
+
 If three components use the same rack unit range, the row is divided into three equally sized fields. The vertical divider lines use the same gray color as the component frames.
 
-Only components with an identical `(top, span)` combination can share a row. Overlapping but different ranges, such as `(13, 1)` and `(12, 1)`, are still rejected as conflicting occupancy.
+Only components with an identical `(top_unit, unit_count)` combination can share a row. Overlapping but different ranges, such as `(13, 1)` and `(12, 1)` combined with a two-unit component spanning both, are rejected as conflicting occupancy.
 
-Unoccupied rack units are automatically added as reserve space and displayed using `RESERVE_COLOR`:
+Unoccupied rack units are automatically added as reserve space (labelled "Reserve") and displayed using `RESERVE_COLOR`:
 
 ```python
 RESERVE_COLOR = "#F5F5F5"
@@ -157,16 +201,15 @@ The script checks whether rack units are outside the cabinet or occupied by conf
 
 ## Configuring the VLAN reference list
 
-The `VLAN_REFERENCES` list in `data/rack_data.py` defines the VLANs displayed above each port table in the PDF. Each entry consists of a VLAN ID and a freely selectable name:
+The `VLAN_REFERENCES` list in `data/rack_data.py` defines the VLANs displayed above each port table in the PDF. Each entry is a `VlanReference` consisting of a VLAN ID and a freely selectable name:
 
 ```python
-# VLAN reference list: (VLAN ID, name)
 VLAN_REFERENCES = [
-    (1, "Default"),
-    (10, "Home"),
-    (20, "IoT"),
-    (30, "Guest"),
-    (40, "Camera"),
+    VlanReference(1, "Default"),
+    VlanReference(10, "Home"),
+    VlanReference(20, "IoT"),
+    VlanReference(30, "Guest"),
+    VlanReference(40, "Camera"),
 ]
 ```
 
@@ -182,80 +225,86 @@ VLAN 40 – Camera
 
 The order in `VLAN_REFERENCES` determines the order in the PDF. If the list is empty, no VLAN reference list is displayed.
 
-## Configuring components
+## Configuring port plans
 
-The `RACK_COMPONENTS` list in `data/rack_data.py` defines all components for which a separate PDF page is created. Each component requires a title and a port list:
+The `PORT_PLANS` list in `data/rack_data.py` defines all port plans for which a separate PDF page is created. Each entry is a `PortPlan` with a title and a list of `PortEntry` objects:
 
 ```python
-RACK_COMPONENTS = [
-    {
-        "title": "Patchpanel-Portplan",
-        "ports": [
-            (1, "Flur 1", "", "", "WAN"),
-            (2, "Büro", "1", "Ja", "Access Point - U7 In-Wall"),
-            (3, "Wohnzimmer", "1", "Ja", "Access Point - U6+"),
-            (4, "Flur 2", "1", "Ja", "Access Point - U7-Pro-XG"),
-            (5, "Schlafzimmer", "", "", ""),
+PORT_PLANS = [
+    PortPlan(
+        title="Patchpanel-Portplan",
+        ports=[
+            PortEntry(1, "Flur 1", remark="WAN"),
+            PortEntry(
+                2, "Büro", vlan="1", poe="Ja",
+                remark="Access Point - U7 In-Wall",
+            ),
+            PortEntry(
+                3, "Wohnzimmer", vlan="1", poe="Ja",
+                remark="Access Point - U6+",
+            ),
+            PortEntry(
+                4, "Flur 2", vlan="1", poe="Ja",
+                remark="Access Point - U7-Pro-XG",
+            ),
+            PortEntry(5, "Schlafzimmer"),
         ],
-    },
-    {
-        "title": "Switch-Portplan Lite-8-PoE",
-        "ports": [
-            (1, "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall", "1", "Ja", ""),
-            (2, "Patchpanel Port 3\nWohnzimmer: Access Point - U6+", "1", "Ja", ""),
-            (3, "Patchpanel Port 4\nFlur: Access Point - U7-Pro-XG", "1", "Ja", ""),
-            (5, "Proxmox Host M720q", "1", "Nein", ""),
-            (8, "UCG-Ultra LAN out", "", "Nein", ""),
+    ),
+    PortPlan(
+        title="Switch-Portplan Lite-8-PoE",
+        ports=[
+            PortEntry(
+                1,
+                "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall",
+                vlan="1", poe="Ja",
+            ),
+            PortEntry(5, "Proxmox Host M720q", vlan="1", poe="Nein"),
+            PortEntry(8, "UCG-Ultra LAN out", poe="Nein"),
         ],
-    },
-    {
-        "title": "UCG-Ultra-Portplan",
-        "ports": [
-            (1, "Switch Lite-8-PoE", "1", "Nein", ""),
-            (5, "WAN", "", "Nein", "Uplink"),
+    ),
+    PortPlan(
+        title="UCG-Ultra-Portplan",
+        ports=[
+            PortEntry(1, "Switch Lite-8-PoE", vlan="1", poe="Nein"),
+            PortEntry(5, "WAN", poe="Nein", remark="Uplink"),
         ],
-    },
+    ),
 ]
 ```
 
-| Field | Meaning |
+| Field of `PortPlan` | Meaning |
 | --- | --- |
 | `title` | Heading of the PDF page |
-| `ports` | List of port entries for this component |
+| `ports` | List of `PortEntry` objects for this component |
 
-Each port entry contains five values:
-
-```python
-# (port, destination, VLAN, PoE, remark)
-(1, "Flur 1", "", "", "WAN"),
-```
+Each `PortEntry` has the following fields:
 
 | Field | Meaning | Example |
 | --- | --- | --- |
-| Port | Port number of the respective component | `1` |
-| Destination | Room, connection, or connected device | `"Wohnzimmer"` |
-| VLAN | VLAN ID of the connection | `"1"`, `"10"`, or `""` |
-| PoE | Manually entered PoE information | `"Ja"`, `"Nein"`, or `""` |
-| Remark | Free text for additional information | `"Uplink"` |
+| `port` | Port number of the respective component (required) | `1` |
+| `destination` | Room, connection, or connected device | `"Wohnzimmer"` |
+| `vlan` | VLAN ID of the connection as text | `"1"`, `"10"`, or `""` |
+| `poe` | Manually entered PoE information | `"Ja"`, `"Nein"`, or `""` |
+| `remark` | Free text for additional information | `"Uplink"` |
 
-The VLAN value can be entered as text, for example `"10"`, or as a number, for example `10`. The field can remain empty for unassigned VLANs.
+Only `port` is required. All other fields default to an empty string, so an unused port can be written as `PortEntry(6)`. The `vlan` field is text, for example `"10"`, and can remain empty for unassigned VLANs.
 
-The order of entries in `RACK_COMPONENTS` determines the order of the PDF pages. The order of port entries determines the order in the respective table. Each port entry must contain exactly five values.
+The order of entries in `PORT_PLANS` determines the order of the PDF pages. The order of port entries determines the order in the respective table.
 
 The supplied assignments are examples. The script uses the information unchanged; it does not detect or validate network connections, VLAN assignments, or PoE supply.
 
 ## Adding a new component
 
-To add a second patch panel, for example, add another entry to `RACK_COMPONENTS` in `data/rack_data.py`:
+To add a second patch panel, for example, add another entry to `PORT_PLANS` in `data/rack_data.py`:
 
 ```python
-{
-    "title": "Patchpanel 2 – Portplan",
-    "ports": [
-        (1, "Keller", "", "", ""),
-        (2, "Terrasse", "", "", ""),
+PortPlan(
+    title="Patchpanel 2 – Portplan",
+    ports=[
+        PortEntry(1, "Keller"),
+        PortEntry(2, "Terrasse"),
     ],
-},
+),
 ```
 
 The main script does not need to be adjusted. The new component automatically receives its own page in the same PDF.
@@ -265,7 +314,11 @@ The main script does not need to be adjusted. The new component automatically re
 Use `\n` for a manual line break within a cell:
 
 ```python
-(1, "Patchpanel Port 1\nFlur: Access Point - U7-Pro-XG", "1", "Ja", ""),
+PortEntry(
+    1,
+    "Patchpanel Port 1\nFlur: Access Point - U7-Pro-XG",
+    vlan="1", poe="Ja",
+)
 ```
 
 This becomes the following in the PDF:
@@ -275,7 +328,7 @@ Patchpanel Port 1
 Flur: Access Point - U7-Pro-XG
 ```
 
-This works in all text fields of a port entry, i.e. in **destination** and **remark**.
+This works in all text fields of a port entry, i.e. in `destination` and `remark`.
 
 ## Settings
 
@@ -318,12 +371,10 @@ The timestamp is created anew on every function call. The visible date line uses
 Stand: 26.10.2026 – 17:25 Uhr
 ```
 
-The format is defined within `create_pdf()`:
+The format is defined by the constant `CREATED_AT_FORMAT`:
 
 ```python
-created_at_text = created_at.strftime(
-    "Stand: %d.%m.%Y – %H:%M Uhr"
-)
+CREATED_AT_FORMAT = "Stand: %d.%m.%Y – %H:%M Uhr"
 ```
 
 ### File name
@@ -344,6 +395,8 @@ With `False`, the same file name is always used:
 network_rack_documentation.pdf
 ```
 
+The two file name patterns are defined by the constants `TIMESTAMPED_FILE_NAME_FORMAT` and `PLAIN_FILE_NAME`.
+
 An existing file with the same name is overwritten. Even with an enabled timestamp, two calls within the same second can produce the same file name.
 
 ### Output folder
@@ -354,12 +407,28 @@ OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 
 By default, the output folder is located next to the main script. To use a different folder, adjust this variable.
 
+## Layout constants
+
+Below the settings, `network_rack_documentation.py` contains named constants instead of hard-coded values. They are grouped by purpose:
+
+| Group | Examples |
+| --- | --- |
+| File names and visible texts | `PLAIN_FILE_NAME`, `CREATED_AT_FORMAT`, `RESERVE_LABEL`, `RACK_UNIT_SUFFIX`, `PORT_TABLE_HEADERS`, `PAGE_NUMBER_PREFIX` |
+| Fonts and colors | `FONT_REGULAR`, `FONT_BOLD`, `TEXT_MUTED_COLOR`, `RACK_FRAME_COLOR`, `TABLE_HEADER_BACKGROUND` |
+| Page layout | `PAGE_MARGIN`, `RACK_PAGE_TITLE_BLOCK_HEIGHT`, `HEADER_SPACING`, `FOOTER_BASELINE_Y` |
+| Paragraph styles | `TITLE_FONT_SIZE`, `TITLE_LEADING`, `BODY_FONT_SIZE`, `BODY_LEADING` |
+| Port table | `PORT_TABLE_COLUMN_RATIOS`, `PORT_TABLE_PADDING_X`, `PORT_TABLE_PADDING_Y` |
+| Rack drawing | `RACK_WIDTH_RATIO`, `COMPONENT_INSET_X`, `MOUNTING_HOLE_RADIUS`, `COMPONENT_LABEL_FONT_SIZE` |
+
+Visible PDF texts stay in German, even though the constants and code are in English.
+
 ## Project structure
 
 ```text
 network-rack-documentation/
 ├── data/
 │   ├── .gitignore
+│   ├── models.py
 │   └── rack_data.py
 ├── .gitignore
 ├── network_rack_documentation.py
@@ -367,3 +436,9 @@ network-rack-documentation/
 └── output/
     └── .gitignore
 ```
+
+| File | Purpose |
+| --- | --- |
+| `data/models.py` | Dataclasses for rack information, components, VLANs, and port plans |
+| `data/rack_data.py` | User-editable input data |
+| `network_rack_documentation.py` | Validation, layout drawing, and PDF generation |

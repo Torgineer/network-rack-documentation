@@ -8,22 +8,28 @@ Installation: python -m pip install reportlab
 Start: python network_rack_documentation.py
 """
 
+from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Sequence, Union
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape, portrait
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table,
     TableStyle,
 )
 
+from data.models import PortPlan, RackComponent, RackInfo
 from data.rack_data import (
-    RACK_COMPONENTS,
+    PORT_PLANS,
     RACK_INFO,
     RACK_LAYOUT,
     RESERVE_COLOR,
@@ -49,7 +55,136 @@ TIMESTAMP_IN_FILE_NAME = True
 OUTPUT_FOLDER = Path(__file__).resolve().parent / "output"
 
 
-def validate_layout(layout, total_rack_units):
+# =============================================================
+# CONSTANTS – file names and visible (German) texts
+# =============================================================
+
+# File name used when TIMESTAMP_IN_FILE_NAME is False.
+PLAIN_FILE_NAME = "network_rack_documentation.pdf"
+
+# strftime pattern used when TIMESTAMP_IN_FILE_NAME is True.
+TIMESTAMPED_FILE_NAME_FORMAT = (
+    "network_rack_documentation_%Y-%m-%d_%H-%M-%S.pdf"
+)
+
+# strftime pattern of the "last updated" line on every page.
+CREATED_AT_FORMAT = "Stand: %d.%m.%Y – %H:%M Uhr"
+
+# Label of automatically added unoccupied rack units.
+RESERVE_LABEL = "Reserve"
+
+# Suffix of the rack unit numbers ("HE" = Höheneinheit).
+RACK_UNIT_SUFFIX = "HE"
+
+# Column headings of the port plan tables.
+PORT_TABLE_HEADERS = ("Port", "Ziel", "VLAN", "PoE", "Bemerkung")
+
+# Page number text; the page number is appended.
+PAGE_NUMBER_PREFIX = "Seite"
+
+
+# =============================================================
+# CONSTANTS – fonts and colors
+# =============================================================
+
+FONT_REGULAR = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+
+TEXT_MUTED_COLOR = colors.HexColor("#666666")
+RACK_FRAME_COLOR = colors.HexColor("#555555")
+
+TABLE_HEADER_BACKGROUND = colors.HexColor("#1f4e79")
+TABLE_GRID_COLOR = colors.HexColor("#b3bac3")
+TABLE_ROW_COLORS = [colors.white, colors.HexColor("#f2f6fa")]
+
+
+# =============================================================
+# CONSTANTS – page layout
+# =============================================================
+
+PAGE_MARGIN = 15 * mm
+
+# Vertical space reserved on the rack page for title, subtitle and
+# timestamp, plus the gap below them.
+RACK_PAGE_TITLE_BLOCK_HEIGHT = 28 * mm
+RACK_PAGE_CONTENT_SPACING = 8 * mm
+
+# Gap between the page header and the page content.
+HEADER_SPACING = 5 * mm
+
+# Gap between the VLAN reference list and the port table.
+VLAN_REFERENCE_SPACING = 6 * mm
+
+FOOTER_FONT_SIZE = 8
+FOOTER_BASELINE_Y = 9 * mm
+
+
+# =============================================================
+# CONSTANTS – paragraph styles
+# =============================================================
+
+TITLE_FONT_SIZE = 16
+TITLE_LEADING = 20
+TITLE_SPACE_AFTER = 6 * mm
+
+BODY_FONT_SIZE = 9
+BODY_LEADING = 12
+
+
+# =============================================================
+# CONSTANTS – port table
+# =============================================================
+
+# Column widths as a fraction of the document width:
+# Port, Ziel, VLAN, PoE, Bemerkung.
+PORT_TABLE_COLUMN_RATIOS = (0.09, 0.30, 0.09, 0.09, 0.43)
+
+PORT_TABLE_GRID_LINE_WIDTH = 0.5
+PORT_TABLE_PADDING_X = 6
+PORT_TABLE_PADDING_Y = 5
+
+
+# =============================================================
+# CONSTANTS – rack drawing
+# =============================================================
+
+# Share of the available width taken by the rack. The remaining width
+# is intentionally unused to keep the layout readable.
+RACK_WIDTH_RATIO = 0.52
+
+# Small inset that keeps component boxes from overlapping the rack
+# frame and the rack unit boundaries.
+COMPONENT_INSET_X = 1.2 * mm
+COMPONENT_INSET_Y = 0.6 * mm
+
+RACK_FRAME_LINE_WIDTH = 1.2
+RACK_UNIT_BOUNDARY_LINE_WIDTH = 0.3
+COMPONENT_LINE_WIDTH = 1
+COMPONENT_DIVIDER_LINE_WIDTH = 1
+
+MOUNTING_HOLE_LINE_WIDTH = 0.5
+MOUNTING_HOLE_INSET_X = 3 * mm
+MOUNTING_HOLE_RADIUS = 1.1 * mm
+
+DEFAULT_TEXT_SIZE = 9
+COMPONENT_LABEL_FONT_SIZE = 7
+COMPONENT_SUBTITLE_FONT_SIZE = 6
+COMPONENT_TEXT_PADDING_X = 3 * mm
+
+# Vertical text offsets relative to the vertical center of a component.
+LABEL_OFFSET_WITH_SUBTITLE = 1.0 * mm
+LABEL_OFFSET_WITHOUT_SUBTITLE = -0.8 * mm
+SUBTITLE_OFFSET_BELOW_CENTER = 2.5 * mm
+
+RACK_UNIT_NUMBER_FONT_SIZE = 7
+RACK_UNIT_NUMBER_RIGHT_PADDING = 4 * mm
+RACK_UNIT_NUMBER_TOP_OFFSET = 3.8 * mm
+
+
+def validate_layout(
+    layout: Sequence[RackComponent],
+    total_rack_units: int,
+) -> Sequence[RackComponent]:
     """Validate rack unit ranges and conflicting occupancy.
 
     Components may share a rack unit row only if they have exactly the
@@ -58,8 +193,7 @@ def validate_layout(layout, total_rack_units):
     unit. Overlapping but different ranges are rejected.
 
     Args:
-        layout: Rack components in the format
-            (top rack unit, number of rack units, name, subtitle, color).
+        layout: Rack components to validate.
         total_rack_units: Total number of rack units in the cabinet.
 
     Returns:
@@ -77,7 +211,11 @@ def validate_layout(layout, total_rack_units):
     available_rack_units = set(range(1, total_rack_units + 1))
     known_ranges = set()
 
-    for top, span, label, *_ in layout:
+    for component in layout:
+        top = component.top_unit
+        span = component.unit_count
+        label = component.name
+
         if type(top) is not int or type(span) is not int:
             raise ValueError(
                 f"{label}: rack unit and number of rack units "
@@ -87,8 +225,8 @@ def validate_layout(layout, total_rack_units):
         if span < 1 or top > total_rack_units or top - span < 0:
             raise ValueError(f"{label}: invalid rack unit range.")
 
-        occupied_rack_units = set(range(top - span + 1, top + 1))
-        rack_unit_range = (top, span)
+        occupied_rack_units = set(component.occupied_units)
+        rack_unit_range = component.row_key
 
         # Identical ranges are allowed because multiple components can
         # be mounted side by side in the same rack unit row.
@@ -104,7 +242,10 @@ def validate_layout(layout, total_rack_units):
     return layout
 
 
-def add_reserve_units(layout, total_rack_units):
+def add_reserve_units(
+    layout: Sequence[RackComponent],
+    total_rack_units: int,
+) -> list[RackComponent]:
     """Add all unoccupied rack units as reserve space.
 
     Args:
@@ -115,10 +256,10 @@ def add_reserve_units(layout, total_rack_units):
         Rack components and reserve units, sorted from the top of the
         cabinet to the bottom.
     """
-    occupied_rack_units = set()
+    occupied_rack_units: set[int] = set()
 
-    for top, span, *_ in layout:
-        occupied_rack_units.update(range(top - span + 1, top + 1))
+    for component in layout:
+        occupied_rack_units.update(component.occupied_units)
 
     available_rack_units = (
         set(range(1, total_rack_units + 1))
@@ -126,14 +267,25 @@ def add_reserve_units(layout, total_rack_units):
     )
 
     reserve_units = [
-        (rack_unit, 1, "Reserve", "", RESERVE_COLOR)
+        RackComponent(
+            top_unit=rack_unit,
+            unit_count=1,
+            name=RESERVE_LABEL,
+            color=RESERVE_COLOR,
+        )
         for rack_unit in available_rack_units
     ]
 
-    return sorted(layout + reserve_units, reverse=True)
+    return sorted(
+        list(layout) + reserve_units,
+        key=lambda component: component.sort_key,
+        reverse=True,
+    )
 
 
-def group_components(layout):
+def group_components(
+    layout: Sequence[RackComponent],
+) -> list[list[RackComponent]]:
     """Group components that occupy the same rack unit range.
 
     Components with an identical (top, span) range share one rack unit
@@ -147,15 +299,14 @@ def group_components(layout):
         A list of component groups, sorted from the top of the cabinet
         to the bottom.
     """
-    groups = {}
+    groups: dict[tuple[int, int], list[RackComponent]] = {}
 
     for component in layout:
-        top, span = component[0], component[1]
-        groups.setdefault((top, span), []).append(component)
+        groups.setdefault(component.row_key, []).append(component)
 
     return sorted(
         groups.values(),
-        key=lambda group: group[0][0],
+        key=lambda group: group[0].top_unit,
         reverse=True,
     )
 
@@ -163,7 +314,13 @@ def group_components(layout):
 class RackLayout(Flowable):
     """Draw the network rack layout as a flowable for the PDF."""
 
-    def __init__(self, layout, total_rack_units, width, height):
+    def __init__(
+        self,
+        layout: Sequence[RackComponent],
+        total_rack_units: int,
+        width: float,
+        height: float,
+    ) -> None:
         """Initialize the rack layout drawing.
 
         Args:
@@ -184,20 +341,21 @@ class RackLayout(Flowable):
         self.rack_top = height
         self.rack_unit_height = height / total_rack_units
 
-        # Draw the rack on the left side of the page. The remaining
-        # width is intentionally unused to keep the layout readable.
-        self.rack_width = width * 0.52
+        # Draw the rack on the left side of the page.
+        self.rack_width = width * RACK_WIDTH_RATIO
 
-        # Small inset prevents component boxes from overlapping the
-        # rack frame and rack unit boundaries.
-        self.inset_x = 1.2 * mm
-        self.inset_y = 0.6 * mm
+        self.inset_x = COMPONENT_INSET_X
+        self.inset_y = COMPONENT_INSET_Y
 
         # Color used for component frames and dividers between
         # components sharing one rack unit row.
-        self.frame_color = colors.HexColor("#555555")
+        self.frame_color = RACK_FRAME_COLOR
 
-    def wrap(self, available_width, available_height):
+    def wrap(
+        self,
+        available_width: float,
+        available_height: float,
+    ) -> tuple[float, float]:
         """Return the fixed width and height of the rack layout.
 
         Args:
@@ -210,11 +368,11 @@ class RackLayout(Flowable):
         """
         return self.width, self.height
 
-    def rack_unit_y(self, rack_unit):
+    def rack_unit_y(self, rack_unit: int) -> float:
         """Return the PDF y-coordinate of the bottom edge of a rack unit.
 
-        Rack units are numbered from top to bottom, while PDF
-        coordinates increase from bottom to top.
+        Rack units are numbered from the bottom (1) to the top, which
+        matches the PDF coordinate system, where y increases upwards.
 
         Args:
             rack_unit: Rack unit number, starting at 1 at the bottom.
@@ -226,8 +384,16 @@ class RackLayout(Flowable):
             (rack_unit - 1) * self.rack_unit_height
         )
 
-    def draw_text(self, canvas, x, y, text, size=9, bold=False,
-                  max_width=None):
+    def draw_text(
+        self,
+        canvas: Canvas,
+        x: float,
+        y: float,
+        text: str,
+        size: float = DEFAULT_TEXT_SIZE,
+        bold: bool = False,
+        max_width: Optional[float] = None,
+    ) -> None:
         """Draw text and reduce its font size if it exceeds max_width.
 
         Args:
@@ -239,7 +405,7 @@ class RackLayout(Flowable):
             bold: Whether to use a bold font.
             max_width: Maximum available text width in points.
         """
-        font = "Helvetica-Bold" if bold else "Helvetica"
+        font = FONT_BOLD if bold else FONT_REGULAR
 
         if max_width is not None:
             text_width = canvas.stringWidth(text, font, size)
@@ -253,10 +419,14 @@ class RackLayout(Flowable):
         canvas.setFont(font, size)
         canvas.drawString(x, y, text)
 
-    def draw_rack(self, canvas):
-        """Draw the rack frame, rack unit boundaries and mounting holes."""
+    def draw_rack(self, canvas: Canvas) -> None:
+        """Draw the rack frame, rack unit boundaries and mounting holes.
+
+        Args:
+            canvas: ReportLab canvas to draw on.
+        """
         canvas.setStrokeColor(colors.black)
-        canvas.setLineWidth(1.2)
+        canvas.setLineWidth(RACK_FRAME_LINE_WIDTH)
         canvas.rect(
             self.rack_x,
             self.rack_bottom,
@@ -270,38 +440,47 @@ class RackLayout(Flowable):
             # Draw internal rack unit boundaries, but not the outer
             # frame boundaries.
             if 0 < boundary < self.total_rack_units:
-                canvas.setLineWidth(0.3)
+                canvas.setLineWidth(RACK_UNIT_BOUNDARY_LINE_WIDTH)
                 canvas.line(
                     self.rack_x, y,
                     self.rack_x + self.rack_width, y,
                 )
 
             # Draw mounting holes at every rack unit boundary.
-            canvas.setLineWidth(0.5)
+            canvas.setLineWidth(MOUNTING_HOLE_LINE_WIDTH)
             for x in (
-                self.rack_x + 3 * mm,
-                self.rack_x + self.rack_width - 3 * mm,
+                self.rack_x + MOUNTING_HOLE_INSET_X,
+                self.rack_x + self.rack_width - MOUNTING_HOLE_INSET_X,
             ):
-                canvas.circle(x, y, 1.1 * mm)
+                canvas.circle(x, y, MOUNTING_HOLE_RADIUS)
 
-    def draw_component(self, canvas, component, x, width):
+    def draw_component(
+        self,
+        canvas: Canvas,
+        component: RackComponent,
+        x: float,
+        width: float,
+    ) -> None:
         """Draw one component inside the specified horizontal area.
 
         Args:
             canvas: ReportLab canvas to draw on.
-            component: Component in the format
-                (top rack unit, number of rack units, name, subtitle,
-                color).
+            component: Component or reserve unit to draw.
             x: Left x-coordinate of the component box.
             width: Width of the component box.
         """
-        top, span, label, subtitle, color = component
+        top = component.top_unit
+        span = component.unit_count
+        label = component.name
+        subtitle = component.subtitle
+        color = component.color
+
         y = self.rack_unit_y(top - span + 1)
         height = span * self.rack_unit_height
 
         canvas.setFillColor(colors.HexColor(color))
         canvas.setStrokeColor(self.frame_color)
-        canvas.setLineWidth(1)
+        canvas.setLineWidth(COMPONENT_LINE_WIDTH)
         canvas.rect(
             x,
             y + self.inset_y,
@@ -311,16 +490,22 @@ class RackLayout(Flowable):
             fill=1,
         )
 
-        text_x = x + 3 * mm
-        text_width = width - 6 * mm
+        text_x = x + COMPONENT_TEXT_PADDING_X
+        text_width = width - 2 * COMPONENT_TEXT_PADDING_X
         center_y = y + height / 2
+
+        label_offset = (
+            LABEL_OFFSET_WITH_SUBTITLE
+            if subtitle
+            else LABEL_OFFSET_WITHOUT_SUBTITLE
+        )
 
         self.draw_text(
             canvas,
             text_x,
-            center_y + (1.0 if subtitle else -0.8) * mm,
+            center_y + label_offset,
             label,
-            size=7,
+            size=COMPONENT_LABEL_FONT_SIZE,
             bold=True,
             max_width=text_width,
         )
@@ -329,27 +514,33 @@ class RackLayout(Flowable):
             self.draw_text(
                 canvas,
                 text_x,
-                center_y - 2.5 * mm,
+                center_y - SUBTITLE_OFFSET_BELOW_CENTER,
                 subtitle,
-                size=6,
+                size=COMPONENT_SUBTITLE_FONT_SIZE,
                 max_width=text_width,
             )
 
-    def draw_rack_unit_numbers(self, canvas):
-        """Draw the rack unit numbers on the right side of the rack."""
+    def draw_rack_unit_numbers(self, canvas: Canvas) -> None:
+        """Draw the rack unit numbers on the right side of the rack.
+
+        Args:
+            canvas: ReportLab canvas to draw on.
+        """
         canvas.setFillColor(colors.black)
-        canvas.setFont("Helvetica-Bold", 7)
+        canvas.setFont(FONT_BOLD, RACK_UNIT_NUMBER_FONT_SIZE)
 
         for rack_unit in range(1, self.total_rack_units + 1):
             canvas.drawRightString(
-                self.rack_x + self.rack_width - 4 * mm,
+                self.rack_x
+                + self.rack_width
+                - RACK_UNIT_NUMBER_RIGHT_PADDING,
                 self.rack_unit_y(rack_unit)
                 + self.rack_unit_height
-                - 3.8 * mm,
-                f"{rack_unit} HE",
+                - RACK_UNIT_NUMBER_TOP_OFFSET,
+                f"{rack_unit} {RACK_UNIT_SUFFIX}",
             )
 
-    def draw(self):
+    def draw(self) -> None:
         """Draw the complete rack layout, including shared rack unit rows."""
         canvas = self.canv
         self.draw_rack(canvas)
@@ -375,10 +566,10 @@ class RackLayout(Flowable):
 
             if component_count > 1:
                 canvas.setStrokeColor(self.frame_color)
-                canvas.setLineWidth(1)
+                canvas.setLineWidth(COMPONENT_DIVIDER_LINE_WIDTH)
 
-                top = group[0][0]
-                span = group[0][1]
+                top = group[0].top_unit
+                span = group[0].unit_count
                 y = self.rack_unit_y(top - span + 1) + self.inset_y
                 height = (
                     span * self.rack_unit_height
@@ -400,7 +591,253 @@ class RackLayout(Flowable):
         self.draw_rack_unit_numbers(canvas)
 
 
-def create_pdf(portrait_orientation=True):
+@dataclass(frozen=True)
+class PdfStyles:
+    """Paragraph styles used throughout the PDF.
+
+    Attributes:
+        title: Page heading style.
+        subtitle: Muted style for subtitles and timestamps.
+        vlan_reference: Style of the VLAN reference list.
+        cell: Left-aligned table cell style.
+        centered: Centered table cell style.
+        header: Table header style (bold, white text).
+    """
+
+    title: ParagraphStyle
+    subtitle: ParagraphStyle
+    vlan_reference: ParagraphStyle
+    cell: ParagraphStyle
+    centered: ParagraphStyle
+    header: ParagraphStyle
+
+
+def build_styles() -> PdfStyles:
+    """Create the paragraph styles used in the PDF.
+
+    Returns:
+        The collection of paragraph styles.
+    """
+    base_styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "PortPlanTitle",
+        parent=base_styles["Title"],
+        fontName=FONT_BOLD,
+        fontSize=TITLE_FONT_SIZE,
+        leading=TITLE_LEADING,
+        spaceAfter=TITLE_SPACE_AFTER,
+    )
+    subtitle_style = ParagraphStyle(
+        "PortPlanSubtitle",
+        parent=base_styles["Normal"],
+        fontSize=BODY_FONT_SIZE,
+        leading=BODY_LEADING,
+        textColor=TEXT_MUTED_COLOR,
+    )
+    vlan_reference_style = ParagraphStyle(
+        "VlanReference",
+        parent=base_styles["Normal"],
+        fontSize=BODY_FONT_SIZE,
+        leading=BODY_LEADING,
+    )
+    cell_style = ParagraphStyle(
+        "PortPlanCell",
+        parent=base_styles["Normal"],
+        fontSize=BODY_FONT_SIZE,
+        leading=BODY_LEADING,
+    )
+    centered_style = ParagraphStyle(
+        "PortPlanCentered",
+        parent=cell_style,
+        alignment=TA_CENTER,
+    )
+    header_style = ParagraphStyle(
+        "PortPlanHeader",
+        parent=cell_style,
+        fontName=FONT_BOLD,
+        textColor=colors.white,
+    )
+
+    return PdfStyles(
+        title=title_style,
+        subtitle=subtitle_style,
+        vlan_reference=vlan_reference_style,
+        cell=cell_style,
+        centered=centered_style,
+        header=header_style,
+    )
+
+
+def make_paragraph(
+    value: Union[str, int, None],
+    style: ParagraphStyle,
+) -> Paragraph:
+    """Convert a value into an escaped ReportLab paragraph.
+
+    Args:
+        value: Text, number, or None.
+        style: ReportLab paragraph style.
+
+    Returns:
+        ReportLab paragraph with escaped text and support for manual
+        line breaks.
+    """
+    text = "" if value is None else str(value)
+    return Paragraph(
+        escape(text).replace("\n", "<br/>"),
+        style,
+    )
+
+
+def build_vlan_reference_elements(styles: PdfStyles) -> list[Flowable]:
+    """Create the VLAN reference list shown above each port table.
+
+    Args:
+        styles: Paragraph styles of the PDF.
+
+    Returns:
+        List of PDF elements, or an empty list if no VLANs are
+        configured.
+    """
+    if not VLAN_REFERENCES:
+        return []
+
+    vlan_text = "<br/>".join(
+        f"<b>VLAN {reference.vlan_id}</b> – {escape(reference.name)}"
+        for reference in VLAN_REFERENCES
+    )
+
+    return [
+        Paragraph(vlan_text, styles.vlan_reference),
+        Spacer(1, VLAN_REFERENCE_SPACING),
+    ]
+
+
+def build_rack_page(
+    doc: SimpleDocTemplate,
+    rack_info: RackInfo,
+    layout: Sequence[RackComponent],
+    styles: PdfStyles,
+    created_at_text: str,
+) -> list[Flowable]:
+    """Create the PDF elements for the network rack layout page.
+
+    Args:
+        doc: Document that provides the available page area.
+        rack_info: General information about the rack.
+        layout: Rack components including reserve units.
+        styles: Paragraph styles of the PDF.
+        created_at_text: Timestamp line shown below the subtitle.
+
+    Returns:
+        List of PDF elements for the first page.
+    """
+    available_width = doc.width
+    available_height = (
+        doc.height
+        - RACK_PAGE_TITLE_BLOCK_HEIGHT
+        - RACK_PAGE_CONTENT_SPACING
+    )
+
+    return [
+        make_paragraph(rack_info.title, styles.title),
+        make_paragraph(rack_info.subtitle, styles.subtitle),
+        make_paragraph(created_at_text, styles.subtitle),
+        Spacer(1, HEADER_SPACING),
+        RackLayout(
+            layout=layout,
+            total_rack_units=rack_info.total_rack_units,
+            width=available_width,
+            height=available_height,
+        ),
+    ]
+
+
+def build_port_plan_page(
+    doc: SimpleDocTemplate,
+    plan: PortPlan,
+    styles: PdfStyles,
+    created_at_text: str,
+) -> list[Flowable]:
+    """Create the PDF elements for one component port plan page.
+
+    Args:
+        doc: Document that provides the available page width.
+        plan: Port plan containing a title and its port entries.
+        styles: Paragraph styles of the PDF.
+        created_at_text: Timestamp line shown below the title.
+
+    Returns:
+        List of PDF elements for the port plan page.
+    """
+    elements: list[Flowable] = [
+        make_paragraph(plan.title, styles.title),
+        make_paragraph(created_at_text, styles.subtitle),
+        Spacer(1, HEADER_SPACING),
+    ]
+
+    elements.extend(build_vlan_reference_elements(styles))
+
+    data = [[
+        make_paragraph(name, styles.header)
+        for name in PORT_TABLE_HEADERS
+    ]]
+
+    for entry in plan.ports:
+        data.append([
+            make_paragraph(entry.port, styles.centered),
+            make_paragraph(entry.destination, styles.cell),
+            make_paragraph(entry.vlan, styles.centered),
+            make_paragraph(entry.poe, styles.centered),
+            make_paragraph(entry.remark, styles.cell),
+        ])
+
+    table = Table(
+        data,
+        colWidths=[
+            doc.width * proportion
+            for proportion in PORT_TABLE_COLUMN_RATIOS
+        ],
+        repeatRows=1,
+        hAlign="LEFT",
+    )
+
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), TABLE_HEADER_BACKGROUND),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), PORT_TABLE_GRID_LINE_WIDTH,
+         TABLE_GRID_COLOR),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), TABLE_ROW_COLORS),
+        ("LEFTPADDING", (0, 0), (-1, -1), PORT_TABLE_PADDING_X),
+        ("RIGHTPADDING", (0, 0), (-1, -1), PORT_TABLE_PADDING_X),
+        ("TOPPADDING", (0, 0), (-1, -1), PORT_TABLE_PADDING_Y),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), PORT_TABLE_PADDING_Y),
+    ]))
+
+    elements.append(table)
+    return elements
+
+
+def draw_footer(canvas: Canvas, document: SimpleDocTemplate) -> None:
+    """Draw the page number in the bottom-right corner.
+
+    Args:
+        canvas: ReportLab canvas to draw on.
+        document: ReportLab document being rendered.
+    """
+    canvas.saveState()
+    canvas.setFont(FONT_REGULAR, FOOTER_FONT_SIZE)
+    canvas.setFillColor(TEXT_MUTED_COLOR)
+    canvas.drawRightString(
+        document.pagesize[0] - document.rightMargin,
+        FOOTER_BASELINE_Y,
+        f"{PAGE_NUMBER_PREFIX} {document.page}",
+    )
+    canvas.restoreState()
+
+
+def create_pdf(portrait_orientation: bool = True) -> Path:
     """Create the rack layout and port plans in a single PDF.
 
     Args:
@@ -411,22 +848,18 @@ def create_pdf(portrait_orientation=True):
         Path to the generated PDF file.
     """
     created_at = datetime.now().astimezone()
-    created_at_text = created_at.strftime(
-        "Stand: %d.%m.%Y – %H:%M Uhr"
-    )
+    created_at_text = created_at.strftime(CREATED_AT_FORMAT)
 
-    total_rack_units = RACK_INFO["total_rack_units"]
+    total_rack_units = RACK_INFO.total_rack_units
     validated_layout = validate_layout(RACK_LAYOUT, total_rack_units)
     layout = add_reserve_units(validated_layout, total_rack_units)
 
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
     if TIMESTAMP_IN_FILE_NAME:
-        file_name = created_at.strftime(
-            "network_rack_documentation_%Y-%m-%d_%H-%M-%S.pdf"
-        )
+        file_name = created_at.strftime(TIMESTAMPED_FILE_NAME_FORMAT)
     else:
-        file_name = "network_rack_documentation.pdf"
+        file_name = PLAIN_FILE_NAME
 
     pdf_file = OUTPUT_FOLDER / file_name
 
@@ -437,190 +870,27 @@ def create_pdf(portrait_orientation=True):
             if portrait_orientation
             else landscape(A4)
         ),
-        leftMargin=15 * mm,
-        rightMargin=15 * mm,
-        topMargin=15 * mm,
-        bottomMargin=15 * mm,
+        leftMargin=PAGE_MARGIN,
+        rightMargin=PAGE_MARGIN,
+        topMargin=PAGE_MARGIN,
+        bottomMargin=PAGE_MARGIN,
         title=DOCUMENT_TITLE,
     )
 
-    styles = getSampleStyleSheet()
+    styles = build_styles()
 
-    title_style = ParagraphStyle(
-        "PortplanTitel", parent=styles["Title"],
-        fontName="Helvetica-Bold", fontSize=16, leading=20,
-        spaceAfter=6 * mm,
-    )
-    subtitle_style = ParagraphStyle(
-        "PortplanUntertitel", parent=styles["Normal"],
-        fontSize=9, leading=12, textColor=colors.HexColor("#666666"),
-    )
-    vlan_reference_style = ParagraphStyle(
-        "VlanReferenz", parent=styles["Normal"],
-        fontSize=9, leading=12,
-    )
-    cell_style = ParagraphStyle(
-        "PortplanZelle", parent=styles["Normal"],
-        fontSize=9, leading=12,
-    )
-    centered_style = ParagraphStyle(
-        "PortplanZentriert", parent=cell_style, alignment=1,
-    )
-    header_style = ParagraphStyle(
-        "PortplanKopf", parent=cell_style,
-        fontName="Helvetica-Bold", textColor=colors.white,
+    elements = build_rack_page(
+        doc, RACK_INFO, layout, styles, created_at_text,
     )
 
-    def paragraph(value, style):
-        """Convert a value into an escaped ReportLab paragraph.
-
-        Args:
-            value: Text, number, or None.
-            style: ReportLab paragraph style.
-
-        Returns:
-            ReportLab paragraph with escaped text and support for
-            manual line breaks.
-        """
-        text = "" if value is None else str(value)
-        return Paragraph(
-            escape(text).replace("\n", "<br/>"),
-            style,
-        )
-
-    def vlan_reference_elements():
-        """Create the VLAN reference list shown above each port table.
-
-        Returns:
-            List of PDF elements, or an empty list if no VLANs are
-            configured.
-        """
-        if not VLAN_REFERENCES:
-            return []
-
-        vlan_text = "<br/>".join(
-            f"<b>VLAN {vlan_id}</b> – {escape(name)}"
-            for vlan_id, name in VLAN_REFERENCES
-        )
-
-        return [
-            Paragraph(vlan_text, vlan_reference_style),
-            Spacer(1, 6 * mm),
-        ]
-
-    def rack_page():
-        """Create the PDF elements for the network rack layout page.
-
-        Returns:
-            List of PDF elements for the first page.
-        """
-        # Reserve vertical space for the page title, subtitle and
-        # timestamp.
-        title_height = 28 * mm
-        spacing = 8 * mm
-
-        available_width = doc.width
-        available_height = (
-            doc.height
-            - title_height
-            - spacing
-        )
-
-        return [
-            paragraph(RACK_INFO["title"], title_style),
-            paragraph(RACK_INFO["subtitle"], subtitle_style),
-            paragraph(created_at_text, subtitle_style),
-            Spacer(1, 5 * mm),
-            RackLayout(
-                layout=layout,
-                total_rack_units=total_rack_units,
-                width=available_width,
-                height=available_height,
-            ),
-        ]
-
-    def port_plan_page(component):
-        """Create the PDF elements for one component port plan page.
-
-        Args:
-            component: Component configuration containing a title and a
-                list of port entries.
-
-        Returns:
-            List of PDF elements for the component page.
-        """
-        elements = [
-            paragraph(component["title"], title_style),
-            paragraph(created_at_text, subtitle_style),
-            Spacer(1, 5 * mm),
-        ]
-
-        elements.extend(vlan_reference_elements())
-
-        data = [[
-            paragraph(name, header_style)
-            for name in ("Port", "Ziel", "VLAN", "PoE", "Bemerkung")
-        ]]
-
-        for port, destination, vlan, poe, remark in component["ports"]:
-            data.append([
-                paragraph(port, centered_style),
-                paragraph(destination, cell_style),
-                paragraph(vlan, centered_style),
-                paragraph(poe, centered_style),
-                paragraph(remark, cell_style),
-            ])
-
-        table = Table(
-            data,
-            colWidths=[
-                doc.width * proportion
-                for proportion in (0.09, 0.30, 0.09, 0.09, 0.43)
-            ],
-            repeatRows=1,
-            hAlign="LEFT",
-        )
-
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4e79")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b3bac3")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-             [colors.white, colors.HexColor("#f2f6fa")]),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-
-        elements.append(table)
-        return elements
-
-    elements = rack_page()
-
-    # Create one separate PDF page for every configured component.
-    for component in RACK_COMPONENTS:
+    # Create one separate PDF page for every configured port plan.
+    for plan in PORT_PLANS:
         elements.append(PageBreak())
-        elements.extend(port_plan_page(component))
-
-    def footer(canvas, document):
-        """Draw the page number in the bottom-right corner.
-
-        Args:
-            canvas: ReportLab canvas to draw on.
-            document: ReportLab document being rendered.
-        """
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.setFillColor(colors.HexColor("#666666"))
-        canvas.drawRightString(
-            document.pagesize[0] - document.rightMargin,
-            9 * mm,
-            f"Seite {document.page}",
+        elements.extend(
+            build_port_plan_page(doc, plan, styles, created_at_text)
         )
-        canvas.restoreState()
 
-    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    doc.build(elements, onFirstPage=draw_footer, onLaterPages=draw_footer)
 
     print(f"PDF created: {pdf_file}")
     return pdf_file
