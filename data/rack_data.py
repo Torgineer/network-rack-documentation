@@ -1,6 +1,37 @@
 # -*- coding: utf-8 -*-
 """Konfigurationsdaten für die Netzwerkschrank-Dokumentation."""
 
+# Allgemeine Informationen zum Netzwerkschrank.
+RACK_INFO = {
+    "titel": "Netzwerkschrank-Aufteilung",
+    "gesamt_he": 16,
+    "untertitel": (
+        '19" Wandschrank, 16 HE, 450 mm Tiefe, Glastür – '
+        "Digitus Digital Basic"
+    ),
+}
+
+# Aufbau des Netzwerkschranks.
+# Format: (oberste HE, Anzahl HE, Name, Untertitel, Farbe)
+RACK_LAYOUT = [
+    (15, 1, "FRITZ!Box 5690",
+     "auf Fachboden, WAN von hinten", "#FFE0B2"),
+    (13, 1, "UniFi Cloud Gateway Ultra",
+     "1U-Rackmount, direkt unter FRITZ!Box", "#C8E6C9"),
+    (12, 1, "Patchfeld 24 Port",
+     "CAT7 von oben, Anschluss von hinten", "#BBDEFB"),
+    (11, 1, "UniFi Switch Lite 8 PoE",
+     '19"-Rackmount, direkt unter Patchfeld', "#C8E6C9"),
+    (9, 2, "UniFi UNVR Instant",
+     "2U-Rackmount – belegt HE 8 und 9", "#F8BBD0"),
+    (7, 1, "Tiny PC Lenovo M720q",
+     "auf Fachboden", "#D1C4E9"),
+    (1, 1, "Steckdosenleiste",
+     "Netzkabel getrennt von Datenkabeln", "#FFCC80"),
+]
+
+# Farbe für nicht belegte Höheneinheiten.
+RESERVE_COLOR = "#F5F5F5"
 
 # VLAN-Referenzliste: (VLAN-ID, Name)
 VLAN_REFERENZ = [
@@ -10,7 +41,6 @@ VLAN_REFERENZ = [
     (30, "Guest"),
     (40, "Camera"),
 ]
-
 
 # Komponenten im Netzwerkschrank.
 # Jede Komponente erhält eine eigene Seite in der PDF.
