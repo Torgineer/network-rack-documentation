@@ -11,6 +11,7 @@ The PDF file name and console output are in English. The visible content of the 
 - Network rack layout as the first page of the PDF.
 - Rack size is configured using `RACK_INFO.total_rack_units`.
 - Multiple components can share one rack unit row.
+- Components in a shared rack unit row can be positioned explicitly from left to right using `column`.
 - A shared rack unit row is automatically divided equally between its components.
 - Unoccupied rack units are automatically displayed as reserve space.
 - Separate port plans for the patch panel, switch, and UCG-Ultra in one PDF.
@@ -113,17 +114,27 @@ RACK_LAYOUT = [
         color="#FFE0B2",
     ),
     RackComponent(
-        top_unit=13, unit_count=1,
-        name="UniFi Cloud Gateway Ultra",
-        color="#C8E6C9",
-    ),
-    RackComponent(
-        top_unit=13, unit_count=1,
+        top_unit=13,
+        unit_count=1,
         name="UniFi Switch Lite 8 PoE",
         color="#C8E6C9",
+        column=0,
+    ),
+    RackComponent(
+        top_unit=13,
+        unit_count=1,
+        name="UniFi Cloud Gateway Ultra",
+        color="#C8E6C9",
+        column=1,
     ),
     RackComponent(
         top_unit=12, unit_count=1,
+        name="Rangierpanel",
+        subtitle="",
+        color=RESERVE_COLOR,
+    ),
+    RackComponent(
+        top_unit=11, unit_count=1,
         name="Patchfeld 24 Port",
         subtitle="Keystone",
         color="#BBDEFB",
@@ -153,7 +164,8 @@ RACK_LAYOUT = [
 | `unit_count` | Number of occupied rack units | `2` |
 | `name` | Name of the component | `"UniFi UNVR Instant"` |
 | `color` | Background color in the rack layout | `"#F8BBD0"` |
-| `subtitle` | Optional additional mounting or connection information (default: empty) | `"2HE"` |
+| `subtitle` | Optional additional mounting or connection information (default: `None`) | `"2HE"` |
+| `column` | Horizontal position within a shared rack unit row; `0` is leftmost (default: `0`) | `1` |
 
 A component with `top_unit=9` and `unit_count=2`, for example, occupies rack units 8 and 9. The order of entries in `RACK_LAYOUT` does not affect the layout; components are grouped and sorted by their position in the rack.
 
@@ -165,14 +177,18 @@ For example, these two components share rack unit 13:
 
 ```python
 RackComponent(
-    top_unit=13, unit_count=1,
-    name="UniFi Cloud Gateway Ultra",
-    color="#C8E6C9",
-),
-RackComponent(
-    top_unit=13, unit_count=1,
+    top_unit=13,
+    unit_count=1,
     name="UniFi Switch Lite 8 PoE",
     color="#C8E6C9",
+    column=0,
+),
+RackComponent(
+    top_unit=13,
+    unit_count=1,
+    name="UniFi Cloud Gateway Ultra",
+    color="#C8E6C9",
+    column=1,
 ),
 ```
 
@@ -185,19 +201,21 @@ The rack layout automatically divides this row into two equally sized fields:
 └──────────────────────┴──────────────────────┘
 ```
 
-Components within a shared row are ordered by the same sort key as the rest of the layout (top unit, unit count, name, subtitle, color, in descending order), so the order of entries in `RACK_LAYOUT` does not change which component appears on the left.
+Components within a shared rack unit row are ordered by their `column` value in ascending order. Therefore, `column=0` is always displayed on the left and `column=1` on the right. The order of the entries in `RACK_LAYOUT` does not affect the horizontal position.
 
-If three components use the same rack unit range, the row is divided into three equally sized fields. The vertical divider lines use the same gray color as the component frames.
+If three components use the same rack unit range, assign the column values `0`, `1`, and `2`. The row is then divided into three equally sized fields. The vertical divider lines use the same gray color as the component frames.
 
 Only components with an identical `(top_unit, unit_count)` combination can share a row. Overlapping but different ranges, such as `(13, 1)` and `(12, 1)` combined with a two-unit component spanning both, are rejected as conflicting occupancy.
 
-Unoccupied rack units are automatically added as reserve space (labelled "Reserve") and displayed using `RESERVE_COLOR`:
+Each component in a shared rack unit row must use a unique `column` value. If two components use the same column, PDF creation is aborted with an error message.
+
+Unoccupied rack units are automatically added as reserve space (labelled “Reserve”) and displayed using `RESERVE_COLOR`:
 
 ```python
 RESERVE_COLOR = "#F5F5F5"
 ```
 
-The script checks whether rack units are outside the cabinet or occupied by conflicting component ranges. If the layout is invalid, PDF creation is aborted with an error message.
+The script checks whether rack units are outside the cabinet, occupied by conflicting component ranges, or use duplicate column values within the same rack unit row. If the layout is invalid, PDF creation is aborted with an error message.
 
 ## Configuring the VLAN reference list
 
@@ -248,6 +266,25 @@ PORT_PLANS = [
                 remark="Access Point - U7-Pro-XG",
             ),
             PortEntry(5, "Schlafzimmer"),
+            PortEntry(6),
+            PortEntry(7),
+            PortEntry(8),
+            PortEntry(9),
+            PortEntry(10),
+            PortEntry(11),
+            PortEntry(12),
+            PortEntry(13),
+            PortEntry(14),
+            PortEntry(15),
+            PortEntry(16),
+            PortEntry(17),
+            PortEntry(18),
+            PortEntry(19),
+            PortEntry(20),
+            PortEntry(21),
+            PortEntry(22),
+            PortEntry(23),
+            PortEntry(24),
         ],
     ),
     PortPlan(
@@ -258,7 +295,20 @@ PORT_PLANS = [
                 "Patchpanel Port 2\nBüro: Access Point - U7 In-Wall",
                 vlan="1", poe="Ja",
             ),
+            PortEntry(
+                2,
+                "Patchpanel Port 3\nWohnzimmer: Access Point - U6+",
+                vlan="1", poe="Ja",
+            ),
+            PortEntry(
+                3,
+                "Patchpanel Port 4\nFlur: Access Point - U7-Pro-XG",
+                vlan="1", poe="Ja",
+            ),
+            PortEntry(4, poe="Ja"),
             PortEntry(5, "Proxmox Host M720q", vlan="1", poe="Nein"),
+            PortEntry(6, poe="Nein"),
+            PortEntry(7, poe="Nein"),
             PortEntry(8, "UCG-Ultra LAN out", poe="Nein"),
         ],
     ),
@@ -266,6 +316,9 @@ PORT_PLANS = [
         title="UCG-Ultra-Portplan",
         ports=[
             PortEntry(1, "Switch Lite-8-PoE", vlan="1", poe="Nein"),
+            PortEntry(2),
+            PortEntry(3),
+            PortEntry(4),
             PortEntry(5, "WAN", poe="Nein", remark="Uplink"),
         ],
     ),

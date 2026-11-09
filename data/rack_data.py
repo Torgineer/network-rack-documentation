@@ -51,6 +51,10 @@ RACK_INFO: RackInfo = RackInfo(
 # between all components in the group. For example, two entries with
 # top_unit=13 and unit_count=1 are displayed side by side in rack
 # unit 13.
+
+# Background color for rack units that are not occupied by a component.
+RESERVE_COLOR: str = "#F5F5F5"
+
 RACK_LAYOUT: list[RackComponent] = [
     RackComponent(
         top_unit=15, unit_count=1,
@@ -58,17 +62,27 @@ RACK_LAYOUT: list[RackComponent] = [
         color="#FFE0B2",
     ),
     RackComponent(
-        top_unit=13, unit_count=1,
-        name="UniFi Cloud Gateway Ultra",
-        color="#C8E6C9",
-    ),
-    RackComponent(
-        top_unit=13, unit_count=1,
+        top_unit=13,
+        unit_count=1,
         name="UniFi Switch Lite 8 PoE",
         color="#C8E6C9",
+        column=0,
+    ),
+    RackComponent(
+        top_unit=13,
+        unit_count=1,
+        name="UniFi Cloud Gateway Ultra",
+        color="#C8E6C9",
+        column=1,
     ),
     RackComponent(
         top_unit=12, unit_count=1,
+        name="Rangierpanel",
+        subtitle="",
+        color=RESERVE_COLOR,
+    ),
+    RackComponent(
+        top_unit=11, unit_count=1,
         name="Patchfeld 24 Port",
         subtitle="Keystone",
         color="#BBDEFB",
@@ -91,9 +105,6 @@ RACK_LAYOUT: list[RackComponent] = [
     ),
 ]
 
-
-# Background color for rack units that are not occupied by a component.
-RESERVE_COLOR: str = "#F5F5F5"
 
 
 # VLAN reference list displayed above every port table.

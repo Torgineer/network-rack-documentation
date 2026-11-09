@@ -192,6 +192,10 @@ def validate_layout(
     for example, two devices to be mounted side by side in one rack
     unit. Overlapping but different ranges are rejected.
 
+    Components sharing a rack unit row must use distinct column values.
+    A column value of 0 refers to the leftmost position, 1 to the
+    position to its right, and so on.
+
     Args:
         layout: Rack components to validate.
         total_rack_units: Total number of rack units in the cabinet.
@@ -200,8 +204,9 @@ def validate_layout(
         The validated rack layout.
 
     Raises:
-        ValueError: If a rack unit range is invalid or conflicts with
-            another, non-identical component range.
+        ValueError: If a rack unit range is invalid, conflicts with
+            another, non-identical component range, or uses a duplicate
+            column within the same rack unit row.
     """
     if total_rack_units < 1:
         raise ValueError(
@@ -210,6 +215,7 @@ def validate_layout(
 
     available_rack_units = set(range(1, total_rack_units + 1))
     known_ranges = set()
+    used_columns: dict[tuple[int, int], set[int]] = {}
 
     for component in layout:
         top = component.top_unit
@@ -225,11 +231,27 @@ def validate_layout(
         if span < 1 or top > total_rack_units or top - span < 0:
             raise ValueError(f"{label}: invalid rack unit range.")
 
+        if type(component.column) is not int or component.column < 0:
+            raise ValueError(
+                f"{label}: column must be a non-negative integer."
+            )
+
         occupied_rack_units = set(component.occupied_units)
         rack_unit_range = component.row_key
 
         # Identical ranges are allowed because multiple components can
-        # be mounted side by side in the same rack unit row.
+        # be mounted side by side in the same rack unit row. However,
+        # each component needs a unique horizontal position.
+        columns = used_columns.setdefault(rack_unit_range, set())
+
+        if component.column in columns:
+            raise ValueError(
+                f"{label}: column {component.column} is already used "
+                f"in rack unit row {rack_unit_range}."
+            )
+
+        columns.add(component.column)
+
         if rack_unit_range not in known_ranges:
             if not occupied_rack_units <= available_rack_units:
                 raise ValueError(
@@ -288,7 +310,7 @@ def group_components(
 ) -> list[list[RackComponent]]:
     """Group components that occupy the same rack unit range.
 
-    Components with an identical (top, span) range share one rack unit
+    Components with an identical top and span range share one rack unit
     row. The drawing code divides such a row equally between all
     components in the group.
 
@@ -297,7 +319,8 @@ def group_components(
 
     Returns:
         A list of component groups, sorted from the top of the cabinet
-        to the bottom.
+        to the bottom. Components within one group are ordered from left
+        to right by their column value.
     """
     groups: dict[tuple[int, int], list[RackComponent]] = {}
 
@@ -305,7 +328,10 @@ def group_components(
         groups.setdefault(component.row_key, []).append(component)
 
     return sorted(
-        groups.values(),
+        (
+            sorted(group, key=lambda component: component.column)
+            for group in groups.values()
+        ),
         key=lambda group: group[0].top_unit,
         reverse=True,
     )
